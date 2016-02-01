@@ -14,6 +14,38 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
+SET(CONNECTOR_C_INSTALLDIR "${CMAKE_BINARY_DIR}/mariadb-connector-c/${CMAKE_CFG_INTDIR}" CACHE STRING "")
+INCLUDE(ExternalProject)
+ExternalProject_Add(
+  mariadb_connector_c
+  GIT_REPOSITORY "https://github.com/MariaDB/mariadb-connector-c/"
+  UPDATE_COMMAND ""
+  PATCH_COMMAND ""
+  SOURCE_DIR ${CMAKE_BINARY_DIR}/mariadb-connector-c-src
+  INSTALL_DIR ${CONNECTOR_C_INSTALLDIR}
+  CMAKE_ARGS
+  "-DCMAKE_INSTALL_PREFIX=${CONNECTOR_C_INSTALLDIR}"
+  TEST_COMMAND ""
+)
+
+ADD_LIBRARY(mariadbclient STATIC IMPORTED GLOBAL)
+SET_TARGET_PROPERTIES(mariadbclient PROPERTIES IMPORTED_LOCATION
+  "${CONNECTOR_C_INSTALLDIR}/lib/mariadb/${CMAKE_STATIC_LIBRARY_PREFIX}mariadbclient${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
+ADD_DEPENDENCIES(mariadbclient mariadb_connector_c)
+
+ADD_LIBRARY(libmariadb STATIC IMPORTED GLOBAL)
+IF(WIN32)
+SET_TARGET_PROPERTIES(libmariadb PROPERTIES IMPORTED_LOCATION
+  "${CONNECTOR_C_INSTALLDIR}/lib/mariadb/libmariadb${CMAKE_STATIC_LIBRARY_SUFFIX}")
+ELSE()
+SET_TARGET_PROPERTIES(libmariadb PROPERTIES IMPORTED_LOCATION
+  "${CONNECTOR_C_INSTALLDIR}/lib/mariadb/${CMAKE_STATIC_LIBRARY_PREFIX}mysql${CMAKE_STATIC_LIBRARY_SUFFIX}")
+ENDIF()
+
+ADD_DEPENDENCIES(libmariadb mariadb_connector_c)
+
+
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/libmysql

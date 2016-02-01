@@ -14,6 +14,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
 INCLUDE_DIRECTORIES(
+  ${CONNECTOR_C_INSTALLDIR}/include/mariadb
   ${CMAKE_SOURCE_DIR}/include
   ${PCRE_INCLUDES}
   ${CMAKE_SOURCE_DIR}/mysys_ssl
@@ -32,7 +33,7 @@ COPY_OPENSSL_DLLS(copy_openssl_client)
 ADD_DEFINITIONS(${SSL_DEFINES})
 MYSQL_ADD_EXECUTABLE(mysql completion_hash.cc mysql.cc readline.cc
                            ${CMAKE_SOURCE_DIR}/sql/sql_string.cc)
-TARGET_LINK_LIBRARIES(mysql mysqlclient)
+TARGET_LINK_LIBRARIES(mysql libmariadb mysys)
 IF(UNIX)
   TARGET_LINK_LIBRARIES(mysql ${MY_READLINE_LIBRARY})
   SET_TARGET_PROPERTIES(mysql PROPERTIES ENABLE_EXPORTS TRUE)
