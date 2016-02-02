@@ -148,7 +148,11 @@ static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
 static my_bool column_types_flag;
 static my_bool preserve_comments= 0;
 static my_bool in_com_source, aborted= 0;
+#ifdef LIBMARIADB
+static size_t opt_max_allowed_packet, opt_net_buffer_length;
+#else
 static ulong opt_max_allowed_packet, opt_net_buffer_length;
+#endif
 static uint verbose=0,opt_silent=0,opt_mysql_port=0, opt_local_infile=0;
 static uint my_end_arg;
 static char * opt_mysql_unix_port=0;
@@ -1862,8 +1866,9 @@ static int get_options(int argc, char **argv)
 {
   char *tmp, *pagpoint;
   int ho_error;
+#ifndef LIBMARIADB
   MYSQL_PARAMETERS *mysql_params= mysql_get_parameters();
-
+#endif
   tmp= (char *) getenv("MYSQL_HOST");
   if (tmp)
     current_host= my_strdup(tmp, MYF(MY_WME));
@@ -1878,8 +1883,13 @@ static int get_options(int argc, char **argv)
     strmov(pager, pagpoint);
   strmov(default_pager, pager);
 
+#ifdef LIBMARIADB
+  mysql_get_infov(NULL, MARIADB_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
+  mysql_get_infov(NULL, MARIADB_NET_BUFFER_LENGTH, &opt_net_buffer_length);
+#else
   opt_max_allowed_packet= *mysql_params->p_max_allowed_packet;
   opt_net_buffer_length= *mysql_params->p_net_buffer_length;
+#endif
 
   if ((ho_error=handle_options(&argc, &argv, my_long_options, get_one_option)))
     return(ho_error);

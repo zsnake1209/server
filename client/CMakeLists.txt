@@ -33,7 +33,7 @@ COPY_OPENSSL_DLLS(copy_openssl_client)
 ADD_DEFINITIONS(${SSL_DEFINES})
 MYSQL_ADD_EXECUTABLE(mysql completion_hash.cc mysql.cc readline.cc
                            ${CMAKE_SOURCE_DIR}/sql/sql_string.cc)
-TARGET_LINK_LIBRARIES(mysql libmariadb mysys)
+TARGET_LINK_LIBRARIES(mysql mariadbclient mysys)
 IF(UNIX)
   TARGET_LINK_LIBRARIES(mysql ${MY_READLINE_LIBRARY})
   SET_TARGET_PROPERTIES(mysql PROPERTIES ENABLE_EXPORTS TRUE)
