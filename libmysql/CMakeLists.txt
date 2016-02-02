@@ -19,6 +19,7 @@ INCLUDE(ExternalProject)
 ExternalProject_Add(
   mariadb_connector_c
   GIT_REPOSITORY "https://github.com/MariaDB/mariadb-connector-c/"
+  GIT_TAG "3.1"
   UPDATE_COMMAND ""
   PATCH_COMMAND ""
   SOURCE_DIR ${CMAKE_BINARY_DIR}/mariadb-connector-c-src
