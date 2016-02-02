@@ -14,7 +14,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
 INCLUDE_DIRECTORIES(
-  ${CONNECTOR_C_INSTALLDIR}/include/mariadb
   ${CMAKE_SOURCE_DIR}/include
   ${PCRE_INCLUDES}
   ${CMAKE_SOURCE_DIR}/mysys_ssl
@@ -27,6 +26,10 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+INCLUDE_DIRECTORIES(
+  BEFORE
+  ${CONNECTOR_C_INSTALLDIR}/include/mariadb
+)
 ## We will need libeay32.dll and ssleay32.dll when running client executables.
 COPY_OPENSSL_DLLS(copy_openssl_client)
 
