@@ -1057,10 +1057,6 @@ extern "C" int write_history(const char *command);
 extern "C" HIST_ENTRY *history_get(int num);
 extern "C" int history_length;
 
-#ifdef HAVE_LIBMARIADB
-extern "C" char *get_tty_password(const char *opt_message);
-#endif
-
 static int not_in_history(const char *line);
 static void initialize_readline (char *name);
 static void fix_history(String *final_command);

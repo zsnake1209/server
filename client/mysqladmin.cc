@@ -69,9 +69,6 @@ static uint ex_var_count, max_var_length, max_val_length;
 
 static void print_version(void);
 static void usage(void);
-#ifdef HAVE_LIBMARIADB
-extern "C" char *get_tty_password(const char *opt_message);
-#endif
 extern "C" my_bool get_one_option(int optid, const struct my_option *opt,
                                   char *argument);
 static my_bool sql_connect(MYSQL *mysql, uint wait);

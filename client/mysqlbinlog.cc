@@ -89,7 +89,6 @@ static void error(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 static void warning(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 
 #ifdef HAVE_LIBMARIADB
-extern "C" char *get_tty_password(const char *opt_message);
 extern "C" char *octet2hex(char *to, const char *str, unsigned int len);
 extern "C" ulong my_net_read(NET *net);
 extern "C" unsigned char *mysql_net_store_length(unsigned char *packet, size_t length);

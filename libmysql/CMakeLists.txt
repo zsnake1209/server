@@ -422,7 +422,6 @@ ENDIF()
 
 
 SET(CLIENT_SOURCES
-  get_password.c 
   libmysql.c
   errmsg.c
   ../sql-common/client.c 
