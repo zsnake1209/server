@@ -22,7 +22,9 @@
 #include <my_pthread.h>				/* because of signal()	*/
 #include <sys/stat.h>
 #include <mysql.h>
-#include <sql_common.h>
+#ifndef HAVE_LIBMARIADB
+ #include <sql_common.h>
+#endif
 #include <welcome_copyright_notice.h>
 #include <my_rnd.h>
 
@@ -67,6 +69,9 @@ static uint ex_var_count, max_var_length, max_val_length;
 
 static void print_version(void);
 static void usage(void);
+#ifdef HAVE_LIBMARIADB
+extern "C" char *get_tty_password(const char *opt_message);
+#endif
 extern "C" my_bool get_one_option(int optid, const struct my_option *opt,
                                   char *argument);
 static my_bool sql_connect(MYSQL *mysql, uint wait);
@@ -446,8 +451,11 @@ int main(int argc,char *argv[])
           re-establish it if --wait ("retry-connect") was given and user
           didn't signal for us to die. Otherwise, signal failure.
         */
-
+#ifndef HAVE_LIBMARIADB
 	if (mysql.net.vio == 0)
+#else
+	if (mysql.net.pvio == 0)
+#endif
 	{
 	  if (option_wait && !interrupted)
 	  {
@@ -528,7 +536,8 @@ static my_bool sql_connect(MYSQL *mysql, uint wait)
     if (mysql_real_connect(mysql,host,user,opt_password,NullS,tcp_port,
 			   unix_port, CLIENT_REMEMBER_OPTIONS))
     {
-      mysql->reconnect= 1;
+      my_bool reconnect= 1;
+      mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
       if (info)
       {
 	fputs("\n",stderr);
@@ -1083,10 +1092,13 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
             mysql_free_result(res);
           }
         }
+#ifndef HAVE_LIBMARIADB
         if (old)
           make_scrambled_password_323(crypted_pw, typed_password);
         else
+#else
           make_scrambled_password(crypted_pw, typed_password);
+#endif
       }
       else
 	crypted_pw[0]=0;			/* No password */
@@ -1194,7 +1206,9 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       break;
     }
     case ADMIN_PING:
-      mysql->reconnect=0;	/* We want to know of reconnects */
+    {
+      my_bool reconnect= 0;
+      mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
       if (!mysql_ping(mysql))
       {
 	if (option_silent < 2)
@@ -1204,7 +1218,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       {
 	if (mysql_errno(mysql) == CR_SERVER_GONE_ERROR)
 	{
-	  mysql->reconnect=1;
+          reconnect= 1;
+          mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
 	  if (!mysql_ping(mysql))
 	    puts("connection was down, but mysqld is now alive");
 	}
@@ -1215,8 +1230,10 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
 	  return -1;
 	}
       }
-      mysql->reconnect=1;	/* Automatic reconnect is default */
+      reconnect=1;	/* Automatic reconnect is default */
+      mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
       break;
+    }
     default:
       my_printf_error(0, "Unknown command: '%-.60s'", error_flags, argv[0]);
       return 1;

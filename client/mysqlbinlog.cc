@@ -38,6 +38,9 @@
 #include "sql_priv.h"
 #include "log_event.h"
 #include "compat56.h"
+#ifdef HAVE_LIBMARIADB
+#include "violite.h"
+#endif
 #include "sql_common.h"
 #include "my_dir.h"
 #include <welcome_copyright_notice.h> // ORACLE_WELCOME_COPYRIGHT_NOTICE
@@ -56,8 +59,9 @@ Rpl_filter *binlog_filter= 0;
 #define BIN_LOG_HEADER_SIZE	4
 #define PROBE_HEADER_LEN	(EVENT_LEN_OFFSET+4)
 
-
+/* where do we use this definition ???
 #define CLIENT_CAPABILITIES	(CLIENT_LONG_PASSWORD | CLIENT_LONG_FLAG | CLIENT_LOCAL_FILES)
+*/
 
 /* Needed for Rpl_filter */
 CHARSET_INFO* system_charset_info= &my_charset_utf8_general_ci;
@@ -74,6 +78,7 @@ uint test_flags = 0;
 static uint opt_protocol= 0;
 static FILE *result_file;
 
+
 #ifndef DBUG_OFF
 static const char* default_dbug_option = "d:t:o,/tmp/mysqlbinlog.trace";
 #endif
@@ -83,6 +88,13 @@ static const char *load_groups[]=
 static void error(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 static void warning(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 
+#ifdef HAVE_LIBMARIADB
+extern "C" char *get_tty_password(const char *opt_message);
+extern "C" char *octet2hex(char *to, const char *str, unsigned int len);
+extern "C" ulong my_net_read(NET *net);
+extern "C" unsigned char *mysql_net_store_length(unsigned char *packet, size_t length);
+#define net_store_length mysql_net_store_length
+#endif
 static bool one_database=0, to_last_remote_log= 0, disable_log_bin= 0;
 static bool opt_hexdump= 0, opt_version= 0;
 const char *base64_output_mode_names[]=
@@ -1747,6 +1759,7 @@ static int parse_args(int *argc, char*** argv)
 */
 static Exit_status safe_connect()
 {
+  my_bool reconnect= 1;
   /* Close any old connections to MySQL */
   if (mysql)
     mysql_close(mysql);
@@ -1780,7 +1793,7 @@ static Exit_status safe_connect()
     error("Failed on connect: %s", mysql_error(mysql));
     return ERROR_STOP;
   }
-  mysql->reconnect= 1;
+  mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
   return OK_CONTINUE;
 }
 
@@ -1981,7 +1994,11 @@ static Exit_status dump_remote_log_entries(PRINT_EVENT_INFO *print_event_info,
   logname_len = (uint) tlen;
   int4store(buf + 6, 0);
   memcpy(buf + 10, logname, logname_len);
+#ifndef HAVE_LIBMARIADB
   if (simple_command(mysql, COM_BINLOG_DUMP, buf, logname_len + 10, 1))
+#else
+  if (ma_simple_command(mysql, COM_BINLOG_DUMP, (char *)buf, logname_len + 10, 1, 0))
+#endif
   {
     error("Got fatal error sending the log dump command.");
     DBUG_RETURN(ERROR_STOP);
@@ -1991,8 +2008,11 @@ static Exit_status dump_remote_log_entries(PRINT_EVENT_INFO *print_event_info,
   {
     const char *error_msg;
     Log_event *ev;
-
+#ifndef HAVE_LIBMARIADB
     len= cli_safe_read(mysql);
+#else
+    len= net_safe_read(mysql);
+#endif
     if (len == packet_error)
     {
       error("Got error reading packet from server: %s", mysql_error(mysql));

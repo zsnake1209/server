@@ -198,6 +198,7 @@ unsigned short terminal_width= 80;
 static char *shared_memory_base_name=0;
 #endif
 static uint opt_protocol=0;
+
 static CHARSET_INFO *charset_info= &my_charset_latin1;
 
 #include "sslopt-vars.h"
@@ -1055,6 +1056,11 @@ extern "C" int read_history(const char *command);
 extern "C" int write_history(const char *command);
 extern "C" HIST_ENTRY *history_get(int num);
 extern "C" int history_length;
+
+#ifdef HAVE_LIBMARIADB
+extern "C" char *get_tty_password(const char *opt_message);
+#endif
+
 static int not_in_history(const char *line);
 static void initialize_readline (char *name);
 static void fix_history(String *final_command);
@@ -1884,8 +1890,8 @@ static int get_options(int argc, char **argv)
   strmov(default_pager, pager);
 
 #ifdef LIBMARIADB
-  mysql_get_infov(NULL, MARIADB_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
-  mysql_get_infov(NULL, MARIADB_NET_BUFFER_LENGTH, &opt_net_buffer_length);
+  mariadb_get_infov(NULL, MARIADB_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
+  mariadb_get_infov(NULL, MARIADB_NET_BUFFER_LENGTH, &opt_net_buffer_length);
 #else
   opt_max_allowed_packet= *mysql_params->p_max_allowed_packet;
   opt_net_buffer_length= *mysql_params->p_net_buffer_length;
@@ -1894,8 +1900,13 @@ static int get_options(int argc, char **argv)
   if ((ho_error=handle_options(&argc, &argv, my_long_options, get_one_option)))
     return(ho_error);
 
+#ifdef LIBMARIADB
+  mysql_options(NULL, MYSQL_OPT_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
+  mysql_options(NULL, MYSQL_OPT_NET_BUFFER_LENGTH, &opt_net_buffer_length);
+#else
   *mysql_params->p_max_allowed_packet= opt_max_allowed_packet;
   *mysql_params->p_net_buffer_length= opt_net_buffer_length;
+#endif
 
   if (status.batch) /* disable pager and outfile in this case */
   {
@@ -4598,7 +4609,7 @@ sql_real_connect(char *host,char *database,char *user,char *password,
     mysql_options(&mysql, MYSQL_OPT_SSL_CRLPATH, opt_ssl_crlpath);
   }
   mysql_options(&mysql,MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
-                (char*)&opt_ssl_verify_server_cert);
+                (my_bool*)&opt_ssl_verify_server_cert);
 #endif
   if (opt_protocol)
     mysql_options(&mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
@@ -4640,12 +4651,16 @@ sql_real_connect(char *host,char *database,char *user,char *password,
     }
     return -1;					// Retryable
   }
-  
+ 
+#ifndef HAVE_LIBMARIADB 
   charset_info= mysql.charset;
+#else
+  charset_info= get_charset_by_name(mysql.charset->csname, MYF(0));
+#endif
   
   connected=1;
 #ifndef EMBEDDED_LIBRARY
-  mysql.reconnect= debug_info_flag; // We want to know if this happens
+  mysql_options(&mysql, MYSQL_OPT_RECONNECT, &debug_info_flag);
 
   /*
     CLIENT_PROGRESS is set only if we requsted it in mysql_real_connect()
@@ -4654,7 +4669,10 @@ sql_real_connect(char *host,char *database,char *user,char *password,
   if (mysql.client_flag & CLIENT_PROGRESS)
     mysql_options(&mysql, MYSQL_PROGRESS_CALLBACK, (void*) report_progress);
 #else
-  mysql.reconnect= 1;
+  {
+    my_bool reconnect= 1;
+    mysql_options(&mysql, MYSQL_OPT_RECONNECT, &reconnect);
+  }
 #endif
 #ifdef HAVE_READLINE
   build_completion_hash(opt_rehash, 1);
