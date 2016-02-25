@@ -34,7 +34,24 @@
 
 #include "mysql_client_fw.c"
 
+#ifdef LIBMARIADB
+#define simple_command(A,B,C,D,E) (A)->methods->db_command((A),(B),(const char *)(C),(D),(E), NULL);
+#endif
+
 /* Query processing */
+
+
+static void set_reconnect(MYSQL *mysql, my_bool reconnect)
+{
+  mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
+}
+
+static my_bool get_reconnect(MYSQL *mysql)
+{
+  my_bool reconnect;
+  mysql_get_option(mysql, MYSQL_OPT_RECONNECT, &reconnect);
+  return reconnect;
+}
 
 static void client_query()
 {
@@ -3072,7 +3089,7 @@ static void test_long_data_str1()
   int        rc, i;
   char       data[255];
   long       length;
-  ulong      max_blob_length, blob_length, length1;
+  ulong      max_blob_length, blob_length= 0, length1;
   my_bool    true_value;
   MYSQL_RES  *result;
   MYSQL_BIND my_bind[2];
@@ -4761,7 +4778,7 @@ static void test_stmt_close()
     myerror("connection failed");
     exit(1);
   }
-  lmysql->reconnect= 1;
+  set_reconnect(lmysql, 1);
   if (!opt_silent)
     fprintf(stdout, "OK");
 
@@ -5445,7 +5462,7 @@ DROP TABLE IF EXISTS test_multi_tab";
     fprintf(stdout, "\n connection failed(%s)", mysql_error(mysql_local));
     exit(1);
   }
-  mysql_local->reconnect= 1;
+  set_reconnect(mysql_local, 1);
 
   rc= mysql_query(mysql_local, query);
   myquery(rc);
@@ -5569,7 +5586,7 @@ static void test_prepare_multi_statements()
     fprintf(stderr, "\n connection failed(%s)", mysql_error(mysql_local));
     exit(1);
   }
-  mysql_local->reconnect= 1;
+  set_reconnect(mysql_local, 1);
   strmov(query, "select 1; select 'another value'");
   stmt= mysql_simple_prepare(mysql_local, query);
   check_stmt_r(stmt);
@@ -6285,6 +6302,8 @@ static void test_pure_coverage()
   rc= mysql_stmt_execute(stmt);
   check_execute(stmt, rc);
 
+#if 0
+  /* MariaDB C/C converts geometry to string */
   my_bind[0].buffer_type= MYSQL_TYPE_GEOMETRY;
   rc= mysql_stmt_bind_result(stmt, my_bind);
   check_execute_r(stmt, rc); /* unsupported buffer type */
@@ -6295,6 +6314,7 @@ static void test_pure_coverage()
   rc= mysql_stmt_store_result(stmt);
   DIE_UNLESS(rc); /* Old error must be reset first */
 
+#endif
   mysql_stmt_close(stmt);
 
   mysql_query(mysql, "DROP TABLE test_pure");
@@ -7174,7 +7194,7 @@ static void test_prepare_grant()
       mysql_close(lmysql);
       exit(1);
     }
-    lmysql->reconnect= 1;
+    set_reconnect(lmysql, 1);
     if (!opt_silent)
       fprintf(stdout, "OK");
 
@@ -7636,7 +7656,7 @@ static void test_drop_temp()
       mysql_close(lmysql);
       exit(1);
     }
-    lmysql->reconnect= 1;
+    set_reconnect(lmysql, 1);
     if (!opt_silent)
       fprintf(stdout, "OK");
 
@@ -13351,10 +13371,14 @@ static void test_bug9478()
       /* Fill in the fetch packet */
       int4store(buff, stmt->stmt_id);
       buff[4]= 1;                               /* prefetch rows */
+#ifndef LIBMARIADB
       rc= ((*mysql->methods->advanced_command)(mysql, COM_STMT_FETCH,
                                                (uchar*) buff,
                                                sizeof(buff), 0,0,1,NULL) ||
            (*mysql->methods->read_query_result)(mysql));
+#else
+      rc= mysql_stmt_fetch(stmt);
+#endif
       DIE_UNLESS(rc);
       if (!opt_silent && i == 0)
         printf("Got error (as expected): %s\n", mysql_error(mysql));
@@ -14952,8 +14976,8 @@ static void test_opt_reconnect()
   }
 
   if (!opt_silent)
-    fprintf(stdout, "reconnect before mysql_options: %d\n", lmysql->reconnect);
-  DIE_UNLESS(lmysql->reconnect == 0);
+    fprintf(stdout, "reconnect before mysql_options: %d\n", get_reconnect(lmysql));
+  DIE_UNLESS(get_reconnect(lmysql) == 0);
 
   if (mysql_options(lmysql, MYSQL_OPT_RECONNECT, &my_true))
   {
@@ -14963,8 +14987,8 @@ static void test_opt_reconnect()
 
   /* reconnect should be 1 */
   if (!opt_silent)
-    fprintf(stdout, "reconnect after mysql_options: %d\n", lmysql->reconnect);
-  DIE_UNLESS(lmysql->reconnect == 1);
+    fprintf(stdout, "reconnect after mysql_options: %d\n", get_reconnect(lmysql));
+  DIE_UNLESS(get_reconnect(lmysql) == 1);
 
   if (!(mysql_real_connect(lmysql, opt_host, opt_user,
                            opt_password, current_db, opt_port,
@@ -14977,8 +15001,8 @@ static void test_opt_reconnect()
   /* reconnect should still be 1 */
   if (!opt_silent)
     fprintf(stdout, "reconnect after mysql_real_connect: %d\n",
-	    lmysql->reconnect);
-  DIE_UNLESS(lmysql->reconnect == 1);
+	    get_reconnect(lmysql));
+  DIE_UNLESS(get_reconnect(lmysql) == 1);
 
   mysql_close(lmysql);
 
@@ -14989,8 +15013,8 @@ static void test_opt_reconnect()
   }
 
   if (!opt_silent)
-    fprintf(stdout, "reconnect before mysql_real_connect: %d\n", lmysql->reconnect);
-  DIE_UNLESS(lmysql->reconnect == 0);
+    fprintf(stdout, "reconnect before mysql_real_connect: %d\n", get_reconnect(lmysql));
+  DIE_UNLESS(get_reconnect(lmysql) == 0);
 
   if (!(mysql_real_connect(lmysql, opt_host, opt_user,
                            opt_password, current_db, opt_port,
@@ -15003,8 +15027,8 @@ static void test_opt_reconnect()
   /* reconnect should still be 0 */
   if (!opt_silent)
     fprintf(stdout, "reconnect after mysql_real_connect: %d\n",
-	    lmysql->reconnect);
-  DIE_UNLESS(lmysql->reconnect == 0);
+	    get_reconnect(lmysql));
+  DIE_UNLESS(get_reconnect(lmysql) == 0);
 
   mysql_close(lmysql);
 }
@@ -17933,7 +17957,8 @@ static void test_bug43560(void)
   strncpy(buffer, values[2], BUFSIZE);
   length= strlen(buffer);
   rc= mysql_stmt_execute(stmt);
-  DIE_UNLESS(rc && mysql_stmt_errno(stmt) == CR_SERVER_LOST);
+  DIE_UNLESS(rc && (mysql_stmt_errno(stmt) == CR_SERVER_LOST ||
+                    mysql_stmt_errno(stmt) == CR_SERVER_GONE_ERROR));
 
   opt_drop_db= 0;
   client_disconnect(conn);
@@ -19343,9 +19368,17 @@ static void test_big_packet()
   /* We run the tests with a server with max packet size of 3200000 */
   size_t big_packet= 31000000L;
   int i;
+#ifndef LIBMARIADB
   MYSQL_PARAMETERS *mysql_params= mysql_get_parameters();
   long org_max_allowed_packet= *mysql_params->p_max_allowed_packet;
   long opt_net_buffer_length= *mysql_params->p_net_buffer_length;
+#else
+  size_t org_max_allowed_packet;
+  size_t org_net_buffer_length;
+ 
+  mysql_get_option(mysql, MYSQL_OPT_MAX_ALLOWED_PACKET, &org_max_allowed_packet);
+  mysql_get_option(mysql, MYSQL_OPT_NET_BUFFER_LENGTH, &org_net_buffer_length);
+#endif
 
   myheader("test_big_packet");
 
@@ -19358,6 +19391,18 @@ static void test_big_packet()
     exit(1);
   }
 
+#ifndef LIBMARIADB
+  *mysql_params->p_max_allowed_packet= big_packet+1000;
+  *mysql_params->p_net_buffer_length=  8L*256L*256L;
+#else
+  {
+    size_t x= big_packet + 1000;
+    mysql_options(mysql_local, MYSQL_OPT_MAX_ALLOWED_PACKET, &x);
+    x= 8L * 256L*256L;
+    mysql_options(mysql_local, MYSQL_OPT_NET_BUFFER_LENGTH, &x);
+  }
+#endif
+
   if (!(mysql_real_connect(mysql_local, opt_host, opt_user,
                            opt_password, current_db, opt_port,
                            opt_unix_socket, 0)))
@@ -19366,8 +19411,6 @@ static void test_big_packet()
     exit(1);
   }
 
-  *mysql_params->p_max_allowed_packet= big_packet+1000;
-  *mysql_params->p_net_buffer_length=  8L*256L*256L;
 
   end= strmov(strfill(strmov(query, "select length(\""), big_packet,'a'),"\")");
 
@@ -19383,9 +19426,14 @@ static void test_big_packet()
 
   mysql_close(mysql_local);
   my_free(query);
-  
+ 
+#ifndef LIBMARIADB 
   *mysql_params->p_max_allowed_packet= org_max_allowed_packet;
   *mysql_params->p_net_buffer_length = opt_net_buffer_length;
+#else
+  mysql_options(mysql, MYSQL_OPT_MAX_ALLOWED_PACKET, &org_max_allowed_packet);
+  mysql_options(mysql, MYSQL_OPT_NET_BUFFER_LENGTH, &org_net_buffer_length);
+#endif
 }
 
 

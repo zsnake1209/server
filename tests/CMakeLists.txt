@@ -14,11 +14,22 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
 ADD_DEFINITIONS("-DMYSQL_CLIENT")
-
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
+IF(WITH_LIBMARIADB)
+  INCLUDE_DIRECTORIES(
+  BEFORE
+  ${CONNECTOR_C_INSTALLDIR}/include/mariadb
+)
+ENDIF()
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include
+                    ${CMAKE_SOURCE_DIR}/client)
 
 ADD_EXECUTABLE(mysql_client_test mysql_client_test.c)
-TARGET_LINK_LIBRARIES(mysql_client_test mysqlclient)
+IF(WITH_LIBMARIADB)
+  SET(CLIENT_LIB mariadbclient mysys)
+ELSE()
+  SET(CLIENT_LIB mysqlclient)
+ENDIF()
+TARGET_LINK_LIBRARIES(mysql_client_test ${CLIENT_LIB})
 SET_TARGET_PROPERTIES(mysql_client_test PROPERTIES LINKER_LANGUAGE CXX)
 
 IF(WITH_UNIT_TESTS)

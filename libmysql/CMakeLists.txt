@@ -14,17 +14,19 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
+INCLUDE(${CMAKE_SOURCE_DIR}/cmake/mariadb_connector_c.cmake)
+
 SET(CONNECTOR_C_INSTALLDIR "${CMAKE_BINARY_DIR}/mariadb-connector-c/${CMAKE_CFG_INTDIR}" CACHE STRING "")
 INCLUDE(ExternalProject)
 ExternalProject_Add(
   mariadb_connector_c
   GIT_REPOSITORY "https://github.com/MariaDB/mariadb-connector-c/"
-  GIT_TAG "3.1"
+  GIT_TAG "master"
   UPDATE_COMMAND ""
   PATCH_COMMAND ""
   SOURCE_DIR ${CMAKE_BINARY_DIR}/mariadb-connector-c-src
   INSTALL_DIR ${CONNECTOR_C_INSTALLDIR}
-  CMAKE_ARGS
+  CMAKE_ARGS ${CC_CMAKE_OPTS}
   "-DCMAKE_INSTALL_PREFIX=${CONNECTOR_C_INSTALLDIR}"
   TEST_COMMAND ""
 )
@@ -41,6 +43,7 @@ SET_TARGET_PROPERTIES(libmariadb PROPERTIES IMPORTED_LOCATION
 ELSE()
 SET_TARGET_PROPERTIES(libmariadb PROPERTIES IMPORTED_LOCATION
   "${CONNECTOR_C_INSTALLDIR}/lib/mariadb/${CMAKE_STATIC_LIBRARY_PREFIX}mysql${CMAKE_STATIC_LIBRARY_SUFFIX}")
+SET_TARGET_PROPERTIES(mariadbclient PROPERTIES IMPORTED_LINK_INTERFACE_LIBRARIES "${CC_LIBS}")
 ENDIF()
 
 ADD_DEPENDENCIES(libmariadb mariadb_connector_c)

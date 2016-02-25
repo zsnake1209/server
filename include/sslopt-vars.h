@@ -30,9 +30,7 @@ SSL_STATIC char *opt_ssl_cipher  = 0;
 SSL_STATIC char *opt_ssl_key     = 0;
 SSL_STATIC char *opt_ssl_crl     = 0;
 SSL_STATIC char *opt_ssl_crlpath = 0;
-#if (defined(MYSQL_CLIENT) || defined(LIBMARIADB))
 SSL_STATIC my_bool opt_ssl_verify_server_cert= 0;
-#endif
 #endif
 #endif /* SSLOPT_VARS_INCLUDED */
 

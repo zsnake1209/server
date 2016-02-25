@@ -26,10 +26,14 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-INCLUDE_DIRECTORIES(
+ADD_DEFINITIONS(-DHAVE_OPENSSL=1)
+
+IF(WITH_LIBMARIADB)
+  INCLUDE_DIRECTORIES(
   BEFORE
   ${CONNECTOR_C_INSTALLDIR}/include/mariadb
 )
+ENDIF()
 ## We will need libeay32.dll and ssleay32.dll when running client executables.
 COPY_OPENSSL_DLLS(copy_openssl_client)
 

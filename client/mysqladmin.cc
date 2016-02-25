@@ -22,9 +22,8 @@
 #include <my_pthread.h>				/* because of signal()	*/
 #include <sys/stat.h>
 #include <mysql.h>
-#ifndef HAVE_LIBMARIADB
- #include <sql_common.h>
-#endif
+#include <sql_common.h>
+#include <mysql_version.h>
 #include <welcome_copyright_notice.h>
 #include <my_rnd.h>
 
@@ -1093,8 +1092,9 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
         if (old)
           make_scrambled_password_323(crypted_pw, typed_password);
         else
-#else
           make_scrambled_password(crypted_pw, typed_password);
+#else
+        ma_make_scrambled_password(crypted_pw, typed_password);
 #endif
       }
       else

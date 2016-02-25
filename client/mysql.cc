@@ -148,11 +148,7 @@ static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
 static my_bool column_types_flag;
 static my_bool preserve_comments= 0;
 static my_bool in_com_source, aborted= 0;
-#ifdef LIBMARIADB
-static size_t opt_max_allowed_packet, opt_net_buffer_length;
-#else
 static ulong opt_max_allowed_packet, opt_net_buffer_length;
-#endif
 static uint verbose=0,opt_silent=0,opt_mysql_port=0, opt_local_infile=0;
 static uint my_end_arg;
 static char * opt_mysql_unix_port=0;
@@ -4596,7 +4592,7 @@ sql_real_connect(char *host,char *database,char *user,char *password,
     mysql_options(&mysql, MYSQL_SECURE_AUTH, (char *) &opt_secure_auth);
   if (using_opt_local_infile)
     mysql_options(&mysql,MYSQL_OPT_LOCAL_INFILE, (char*) &opt_local_infile);
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+#if !defined(EMBEDDED_LIBRARY)
   if (opt_use_ssl)
   {
     mysql_ssl_set(&mysql, opt_ssl_key, opt_ssl_cert, opt_ssl_ca,
@@ -4651,7 +4647,7 @@ sql_real_connect(char *host,char *database,char *user,char *password,
 #ifndef HAVE_LIBMARIADB 
   charset_info= mysql.charset;
 #else
-  charset_info= get_charset_by_name(mysql.charset->csname, MYF(0));
+  charset_info= get_charset_by_name(mysql.charset->name, MYF(0));
 #endif
   
   connected=1;
@@ -4743,7 +4739,7 @@ com_status(String *buffer __attribute__((unused)),
     mysql_free_result(result);
   }
 
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+#if !defined(EMBEDDED_LIBRARY)
   if ((status_str= mysql_get_ssl_cipher(&mysql)))
     tee_fprintf(stdout, "SSL:\t\t\tCipher in use is %s\n",
                 status_str);

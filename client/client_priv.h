@@ -23,6 +23,7 @@
 #include <mysql.h>
 #include <errmsg.h>
 #include <my_getopt.h>
+#include <mysql_version.h>
 
 #ifndef WEXITSTATUS
 # ifdef __WIN__

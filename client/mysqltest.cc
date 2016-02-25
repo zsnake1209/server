@@ -265,6 +265,10 @@ static int replace(DYNAMIC_STRING *ds_str,
                    const char *search_str, ulong search_len,
                    const char *replace_str, ulong replace_len);
 
+#ifdef HAVE_LIBMARIADB
+extern "C" void ma_pvio_close(MARIADB_PVIO *);
+#endif
+
 static uint opt_protocol=0;
 
 DYNAMIC_ARRAY q_lines;
@@ -1524,6 +1528,7 @@ static void cleanup_and_exit(int exit_code)
   }
 
   sf_leaking_memory= 0; /* all memory should be freed by now */
+  sleep(10);
   exit(exit_code);
 }
 
@@ -4394,9 +4399,11 @@ void do_send_quit(struct st_command *command)
 
   if (!(con= find_connection_by_name(name)))
     die("connection '%s' not found in connection pool", name);
-
+#ifndef HAVE_LIBMARIADB
   simple_command(con->mysql,COM_QUIT,0,0,1);
-
+#else
+  con->mysql->methods->db_command(con->mysql, COM_QUIT, 0, 0, 1, 0);
+#endif
   DBUG_VOID_RETURN;
 }
 
@@ -5500,12 +5507,20 @@ void do_close_connection(struct st_command *command)
 #ifndef EMBEDDED_LIBRARY
   if (command->type == Q_DIRTY_CLOSE)
   {
+#ifndef HAVE_LIBMARIADB    
     if (con->mysql->net.vio)
     {
       vio_delete(con->mysql->net.vio);
       con->mysql->net.vio = 0;
     }
+#else
+    if (con->mysql->net.pvio)
+    {
+      ma_pvio_close(con->mysql->net.pvio);
+      con->mysql->net.pvio = 0;
+    }
   }
+#endif  
 #endif /*!EMBEDDED_LIBRARY*/
   if (con->stmt)
     do_stmt_close(con);
@@ -5933,7 +5948,7 @@ void do_connect(struct st_command *command)
   if (opt_charsets_dir)
     mysql_options(con_slot->mysql, MYSQL_SET_CHARSET_DIR,
                   opt_charsets_dir);
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+#if !defined(EMBEDDED_LIBRARY)
   if (opt_use_ssl)
     con_ssl= 1;
 #endif
@@ -8230,10 +8245,14 @@ end:
   revert_properties();
 
   /* Close the statement if reconnect, need new prepare */
-  if (mysql->reconnect)
   {
-    mysql_stmt_close(stmt);
-    cn->stmt= NULL;
+    my_bool reconnect;
+    mysql_get_option(mysql, MYSQL_OPT_RECONNECT, &reconnect);
+    if (reconnect)
+    {
+      mysql_stmt_close(stmt);
+      cn->stmt= NULL;
+    }
   }
 
   DBUG_VOID_RETURN;

@@ -1005,11 +1005,6 @@ enum option_id {
 static TYPELIB option_types={array_elements(default_options)-1,
 			     "options",default_options, NULL};
 
-const char *sql_protocol_names_lib[] =
-{ "TCP", "SOCKET", "PIPE", "MEMORY", NullS };
-TYPELIB sql_protocol_typelib = {array_elements(sql_protocol_names_lib)-1,"",
-				sql_protocol_names_lib, NULL};
-
 static int add_init_command(struct st_mysql_options *options, const char *cmd)
 {
   char *tmp;

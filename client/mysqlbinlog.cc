@@ -54,6 +54,13 @@
 
 #include <algorithm>
 
+#ifdef LIBMARIADB
+#define my_net_write ma_net_write
+#define net_flush ma_net_flush
+#define net_safe_read ma_net_safe_read
+#define my_net_read ma_net_read
+#endif
+
 Rpl_filter *binlog_filter= 0;
 
 #define BIN_LOG_HEADER_SIZE	4
@@ -89,7 +96,6 @@ static void error(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 static void warning(const char *format, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 
 #ifdef HAVE_LIBMARIADB
-extern "C" char *octet2hex(char *to, const char *str, unsigned int len);
 extern "C" ulong my_net_read(NET *net);
 extern "C" unsigned char *mysql_net_store_length(unsigned char *packet, size_t length);
 #define net_store_length mysql_net_store_length
@@ -2631,6 +2637,8 @@ struct encryption_service_st encryption_handler=
 #include "my_decimal.h"
 #include "decimal.c"
 #include "my_decimal.cc"
+#include "../sql-common/my_time.c"
+#include "password.c"
 #include "log_event.cc"
 #include "log_event_old.cc"
 #include "rpl_utility.cc"

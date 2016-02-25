@@ -944,10 +944,15 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 static int get_options(int *argc, char ***argv)
 {
   int ho_error;
+#ifndef HAVE_LIBMARIADB  
   MYSQL_PARAMETERS *mysql_params= mysql_get_parameters();
 
   opt_max_allowed_packet= *mysql_params->p_max_allowed_packet;
   opt_net_buffer_length= *mysql_params->p_net_buffer_length;
+#else
+  mysql_get_optionv(NULL, MYSQL_OPT_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
+  mysql_get_optionv(NULL, MYSQL_OPT_NET_BUFFER_LENGTH, &opt_net_buffer_length);
+#endif
 
   md_result_file= stdout;
   if (load_defaults("my",load_default_groups,argc,argv))
@@ -971,8 +976,13 @@ static int get_options(int *argc, char ***argv)
   if ((ho_error= handle_options(argc, argv, my_long_options, get_one_option)))
     return(ho_error);
 
+#ifndef HAVE_LIBMARIADB
   *mysql_params->p_max_allowed_packet= opt_max_allowed_packet;
   *mysql_params->p_net_buffer_length= opt_net_buffer_length;
+#else
+  mysql_get_optionv(NULL, MYSQL_OPT_MAX_ALLOWED_PACKET, &opt_max_allowed_packet);
+  mysql_get_optionv(NULL, MYSQL_OPT_NET_BUFFER_LENGTH, &opt_net_buffer_length);
+#endif
   if (debug_info_flag)
     my_end_arg= MY_CHECK_ERROR | MY_GIVE_INFO;
   if (debug_check_flag)
@@ -1644,6 +1654,7 @@ static int connect_to_db(char *host, char *user,char *passwd)
 {
   char buff[20+FN_REFLEN];
   DBUG_ENTER("connect_to_db");
+  my_bool reconnect;
 
   verbose_msg("-- Connecting to %s...\n", host ? host : "localhost");
   mysql_init(&mysql_connection);
@@ -1697,7 +1708,8 @@ static int connect_to_db(char *host, char *user,char *passwd)
     As we're going to set SQL_MODE, it would be lost on reconnect, so we
     cannot reconnect.
   */
-  mysql->reconnect= 0;
+  reconnect= 0;
+  mysql_options(&mysql_connection, MYSQL_OPT_RECONNECT, &reconnect);
   my_snprintf(buff, sizeof(buff), "/*!40100 SET @@SQL_MODE='%s' */",
               compatible_mode_normal_str);
   if (mysql_query_with_error_report(mysql, 0, buff))
