@@ -283,7 +283,7 @@ static Sys_var_long Sys_pfs_events_stages_history_size(
 /**
   Variable performance_schema_max_statement_classes.
   The default number of statement classes is the sum of:
-  - COM_END for all regular "statement/com/...",
+  - (COM_END - mariadb gap) for all regular "statement/com/...",
   - 1 for "statement/com/new_packet", for unknown enum_server_command
   - 1 for "statement/com/Error", for invalid enum_server_command
   - SQLCOM_END for all regular "statement/sql/...",
@@ -295,7 +295,8 @@ static Sys_var_ulong Sys_pfs_max_statement_classes(
        "Maximum number of statement instruments.",
        PARSED_EARLY READ_ONLY GLOBAL_VAR(pfs_param.m_statement_class_sizing),
        CMD_LINE(REQUIRED_ARG), VALID_RANGE(0, 256),
-       DEFAULT((ulong) SQLCOM_END + (ulong) COM_END + 4),
+       DEFAULT((ulong) SQLCOM_END +
+               (ulong) (COM_END -(COM_MDB_GAP_END - COM_MDB_GAP_BEG + 1)) + 4),
        BLOCK_SIZE(1));
 
 static Sys_var_long Sys_pfs_events_statements_history_long_size(
@@ -1181,6 +1182,19 @@ static Sys_var_mybool Sys_log_queries_not_using_indexes(
        "Log queries that are executed without benefit of any index to the "
        "slow log if it is open",
        GLOBAL_VAR(opt_log_queries_not_using_indexes),
+       CMD_LINE(OPT_ARG), DEFAULT(FALSE));
+
+static Sys_var_mybool Sys_log_slow_admin_statements(
+       "log_slow_admin_statements",
+       "Log slow OPTIMIZE, ANALYZE, ALTER and other administrative statements to "
+       "the slow log if it is open.",
+       GLOBAL_VAR(opt_log_slow_admin_statements),
+       CMD_LINE(OPT_ARG), DEFAULT(FALSE));
+
+static Sys_var_mybool Sys_log_slow_slave_statements(
+       "log_slow_slave_statements",
+       "Log slow statements executed by slave thread to the slow log if it is open.",
+       GLOBAL_VAR(opt_log_slow_slave_statements),
        CMD_LINE(OPT_ARG), DEFAULT(FALSE));
 
 static Sys_var_ulong Sys_log_warnings(
@@ -3193,9 +3207,9 @@ static Sys_var_ulong Sys_table_cache_size(
 
 static Sys_var_ulong Sys_thread_cache_size(
        "thread_cache_size",
-       "How many threads we should keep in a cache for reuse",
+       "How many threads we should keep in a cache for reuse. These are freed after 5 minutes of idle time",
        GLOBAL_VAR(thread_cache_size), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, 16384), DEFAULT(0), BLOCK_SIZE(1));
+       VALID_RANGE(0, 16384), DEFAULT(256), BLOCK_SIZE(1));
 
 #ifdef HAVE_POOL_OF_THREADS
 static bool fix_tp_max_threads(sys_var *, THD *, enum_var_type)
@@ -4615,8 +4629,7 @@ static bool check_locale(sys_var *self, THD *thd, set_var *var)
     mysql_mutex_lock(&LOCK_error_messages);
     res= (!locale->errmsgs->errmsgs &&
           read_texts(ERRMSG_FILE, locale->errmsgs->language,
-                     &locale->errmsgs->errmsgs,
-                     ER_ERROR_LAST - ER_ERROR_FIRST + 1));
+                     &locale->errmsgs->errmsgs));
     mysql_mutex_unlock(&LOCK_error_messages);
     if (res)
     {

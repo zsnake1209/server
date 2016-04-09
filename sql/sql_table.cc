@@ -90,7 +90,7 @@ static char* add_identifier(THD* thd, char *to_p, const char * end_p,
 {
   uint res;
   uint errors;
-  const char *conv_name;
+  const char *conv_name, *conv_name_end;
   char tmp_name[FN_REFLEN];
   char conv_string[FN_REFLEN];
   int quote;
@@ -111,11 +111,13 @@ static char* add_identifier(THD* thd, char *to_p, const char * end_p,
   {
     DBUG_PRINT("error", ("strconvert of '%s' failed with %u (errors: %u)", conv_name, res, errors));
     conv_name= name;
+    conv_name_end= name + name_len;
   }
   else
   {
     DBUG_PRINT("info", ("conv '%s' -> '%s'", conv_name, conv_string));
     conv_name= conv_string;
+    conv_name_end= conv_string + res;
   }
 
   quote = thd ? get_quote_char_for_identifier(thd, conv_name, res - 1) : '"';
@@ -125,8 +127,8 @@ static char* add_identifier(THD* thd, char *to_p, const char * end_p,
     *(to_p++)= (char) quote;
     while (*conv_name && (end_p - to_p - 1) > 0)
     {
-      uint length= my_mbcharlen(system_charset_info, *conv_name);
-      if (!length)
+      int length= my_charlen(system_charset_info, conv_name, conv_name_end);
+      if (length <= 0)
         length= 1;
       if (length == 1 && *conv_name == (char) quote)
       { 
@@ -9349,15 +9351,14 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
   int error= 1;
   Copy_field *copy= NULL, *copy_end;
   ha_rows found_count= 0, delete_count= 0;
-  uint length= 0;
   SORT_FIELD *sortorder;
+  SORT_INFO  *file_sort= 0;
   READ_RECORD info;
   TABLE_LIST   tables;
   List<Item>   fields;
   List<Item>   all_fields;
-  ha_rows examined_rows;
-  ha_rows found_rows;
   bool auto_increment_field_copied= 0;
+  bool init_read_record_done= 0;
   ulonglong save_sql_mode= thd->variables.sql_mode;
   ulonglong prev_insert_id, time_to_report_progress;
   Field **dfield_ptr= to->default_field;
@@ -9440,9 +9441,7 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
     }
     else
     {
-      from->sort.io_cache=(IO_CACHE*) my_malloc(sizeof(IO_CACHE),
-                                                MYF(MY_FAE | MY_ZEROFILL |
-                                                    MY_THREAD_SPECIFIC));
+      uint length= 0;
       bzero((char *) &tables, sizeof(tables));
       tables.table= from;
       tables.alias= tables.table_name= from->s->table_name.str;
@@ -9454,12 +9453,10 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
           setup_order(thd, thd->lex->select_lex.ref_pointer_array,
                       &tables, fields, all_fields, order) ||
           !(sortorder= make_unireg_sortorder(thd, order, &length, NULL)) ||
-          (from->sort.found_records= filesort(thd, from, sortorder, length,
-                                              NULL, HA_POS_ERROR,
-                                              true,
-                                              &examined_rows, &found_rows,
-                                              &dummy_tracker)) ==
-          HA_POS_ERROR)
+          !(file_sort= filesort(thd, from, sortorder, length,
+                               NULL, HA_POS_ERROR,
+                               true,
+                                &dummy_tracker)))
         goto err;
     }
     thd_progress_next_stage(thd);
@@ -9469,8 +9466,10 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
   /* Tell handler that we have values for all columns in the to table */
   to->use_all_columns();
   to->mark_virtual_columns_for_write(TRUE);
-  if (init_read_record(&info, thd, from, (SQL_SELECT *) 0, 1, 1, FALSE))
+  if (init_read_record(&info, thd, from, (SQL_SELECT *) 0, file_sort, 1, 1,
+                       FALSE))
     goto err;
+  init_read_record_done= 1;
 
   if (ignore && !alter_ctx->fk_error_if_delete_row)
     to->file->extra(HA_EXTRA_IGNORE_DUP_KEY);
@@ -9585,9 +9584,6 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
       found_count++;
     thd->get_stmt_da()->inc_current_row_for_warning();
   }
-  end_read_record(&info);
-  free_io_cache(from);
-  delete [] copy;
 
   THD_STAGE_INFO(thd, stage_enabling_keys);
   thd_progress_next_stage(thd);
@@ -9608,6 +9604,12 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
     error= 1;
 
  err:
+  /* Free resources */
+  if (init_read_record_done)
+    end_read_record(&info);
+  delete [] copy;
+  delete file_sort;
+
   thd->variables.sql_mode= save_sql_mode;
   thd->abort_on_warning= 0;
   *copied= found_count;

@@ -1426,6 +1426,7 @@ void THD::init(void)
   bzero((char *) &org_status_var, sizeof(org_status_var));
   start_bytes_received= 0;
   last_commit_gtid.seq_no= 0;
+  last_stmt= NULL;
   status_in_global= 0;
 #ifdef WITH_WSREP
   wsrep_exec_mode= wsrep_applier ? REPL_RECV :  LOCAL_STATE;
@@ -1705,8 +1706,9 @@ THD::~THD()
   if (status_var.local_memory_used != 0)
   {
     DBUG_PRINT("error", ("memory_used: %lld", status_var.local_memory_used));
-    SAFEMALLOC_REPORT_MEMORY(my_thread_dbug_id());
-    DBUG_ASSERT(status_var.local_memory_used == 0);
+    SAFEMALLOC_REPORT_MEMORY(thread_id);
+    DBUG_ASSERT(status_var.local_memory_used == 0 ||
+                !debug_assert_on_not_freed_memory);
   }
 
   set_current_thd(orig_thd == this ? 0 : orig_thd);
