@@ -4263,6 +4263,8 @@ public:
     current_linfo= 0;
     mysql_mutex_unlock(&LOCK_thread_count);
   }
+  /* Auth packet bundle packet */
+  LEX_STRING bundle_command;
 };
 
 inline void add_to_active_threads(THD *thd)
