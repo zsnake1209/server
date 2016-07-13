@@ -5244,7 +5244,7 @@ static bool fix_batch_mode(sys_var *self, THD *thd, enum_var_type type)
     if (set_batch_mode)
     {
        my_bool has_more_data  
-         = (vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) == 0);
+         = (my_bool) vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) > 0;
        thd->get_stmt_da()->set_skip_flush(has_more_data);
     }
     else

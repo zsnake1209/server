@@ -1639,7 +1639,7 @@ bool dispatch_command(enum enum_server_command command, THD *thd,
   
   if (thd->variables.batch_mode && 
       !thd->killed && !thd->is_error() &&
-      (vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) == 0))
+      vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) > 0)
   {
     /* More commands follow, skip flush */
     thd->get_stmt_da()->set_skip_flush();
