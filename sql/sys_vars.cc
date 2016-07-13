@@ -5235,6 +5235,12 @@ static Sys_var_mybool Sys_query_cache_strip_comments(
        SESSION_VAR(query_cache_strip_comments), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE));
 
+static Sys_var_mybool Sys_batch_mode(
+       "batch_mode",
+       "Client sends multiple queries without waiting for response",
+       SESSION_VAR(batch_mode), CMD_LINE(OPT_ARG),
+       DEFAULT(FALSE));
+
 static ulonglong in_transaction(THD *thd)
 {
   return MY_TEST(thd->in_active_multi_stmt_transaction());
