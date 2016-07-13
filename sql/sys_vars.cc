@@ -5235,11 +5235,33 @@ static Sys_var_mybool Sys_query_cache_strip_comments(
        SESSION_VAR(query_cache_strip_comments), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE));
 
+
+static bool fix_batch_mode(sys_var *self, THD *thd, enum_var_type type)
+{
+  if (type == OPT_SESSION)
+  {
+    my_bool set_batch_mode= thd->variables.batch_mode;  
+    if (set_batch_mode)
+    {
+       my_bool has_more_data  
+         = (vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) == 0);
+       thd->get_stmt_da()->set_skip_flush(has_more_data);
+    }
+    else
+    {
+       thd->get_stmt_da()->set_skip_flush(FALSE);
+    }
+  }
+  return false;
+}
+
 static Sys_var_mybool Sys_batch_mode(
        "batch_mode",
        "Client sends multiple queries without waiting for response",
        SESSION_VAR(batch_mode), CMD_LINE(OPT_ARG),
-       DEFAULT(FALSE));
+       DEFAULT(FALSE),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+       ON_UPDATE(fix_batch_mode));
 
 static ulonglong in_transaction(THD *thd)
 {

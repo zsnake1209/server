@@ -707,8 +707,9 @@ public:
   bool skip_flush() const
   { DBUG_ASSERT(m_status == DA_OK); return m_skip_flush; }
 
-  void set_skip_flush()
-  { m_skip_flush= TRUE; }
+  void set_skip_flush(my_bool skip=TRUE)
+  { m_skip_flush= skip; }
+
 
   uint sql_errno() const
   { DBUG_ASSERT(m_status == DA_ERROR); return m_sql_errno; }
