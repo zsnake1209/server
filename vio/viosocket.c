@@ -448,6 +448,17 @@ int vio_socket_timeout(Vio *vio,
   DBUG_RETURN(ret);
 }
 
+int vio_set_nodelay(Vio * vio, int nodelay)
+{
+  if (vio->type == VIO_TYPE_NAMEDPIPE || vio->type == VIO_TYPE_SHARED_MEMORY)
+  {
+    return;
+  }
+  return mysql_socket_setsockopt(vio->mysql_socket, IPPROTO_TCP, TCP_NODELAY,
+    IF_WIN((const char*), (void*)) &nodelay,
+    sizeof(nodelay));
+}
+
 
 int vio_fastsend(Vio * vio __attribute__((unused)))
 {
@@ -468,16 +479,7 @@ int vio_fastsend(Vio * vio __attribute__((unused)))
 #endif                                    /* IPTOS_THROUGHPUT */
   if (!r)
   {
-#ifdef __WIN__
-    BOOL nodelay= 1;
-#else
-    int nodelay = 1;
-#endif
-
-    r= mysql_socket_setsockopt(vio->mysql_socket, IPPROTO_TCP, TCP_NODELAY,
-                  IF_WIN((const char*), (void*)) &nodelay,
-                  sizeof(nodelay));
-
+    r= vio_set_nodelay(vio, 1);
   }
   if (r)
   {

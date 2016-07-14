@@ -5236,29 +5236,28 @@ static Sys_var_mybool Sys_query_cache_strip_comments(
        DEFAULT(FALSE));
 
 
+extern "C" int vio_set_nodelay(Vio *vio, int nodelay);
 static bool fix_batch_mode(sys_var *self, THD *thd, enum_var_type type)
 {
+#ifndef EMBEDDED_SERVER
   if (type == OPT_SESSION)
   {
-    my_bool set_batch_mode= thd->variables.batch_mode;  
-    if (set_batch_mode)
+    int err = vio_set_nodelay(thd->net.vio, thd->variables.batch_mode ? 0:1);  
+    if (err)
     {
-       my_bool has_more_data  
-         = (my_bool) vio_io_wait(thd->net.vio, VIO_IO_EVENT_READ, 0) > 0;
-       thd->get_stmt_da()->set_skip_flush(has_more_data);
-    }
-    else
-    {
-       thd->get_stmt_da()->set_skip_flush(FALSE);
+      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN, ER_UNKNOWN_ERROR,
+        "Could not %s  Nagle's algorithm, socket error %d", 
+        thd->variables.batch_mode?"enable":"disable", socket_errno);
     }
   }
+#endif
   return false;
 }
 
 static Sys_var_mybool Sys_batch_mode(
        "batch_mode",
-       "Client sends multiple queries without waiting for response",
-       SESSION_VAR(batch_mode), CMD_LINE(OPT_ARG),
+       "Improve the efficiency of TCP/IP networks by reducing the number of packets that need to be sent over the network via Nagle's algoritm",
+       SESSION_ONLY(batch_mode), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
        ON_UPDATE(fix_batch_mode));
