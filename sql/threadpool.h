@@ -115,6 +115,7 @@ struct TP_connection
 struct TP_pool
 {
   virtual ~TP_pool(){};
+  virtual int init()= 0;
   virtual TP_connection *new_connection(CONNECT *)= 0;
   virtual void add(TP_connection *c)= 0;
   virtual int set_max_threads(uint){ return 0; }
@@ -130,7 +131,8 @@ struct TP_pool
 #ifdef _WIN32
 struct TP_pool_win:TP_pool
 {
-  TP_pool_win();
+  TP_pool_win(); 
+  virtual int init();
   virtual ~TP_pool_win();
   virtual TP_connection *new_connection(CONNECT *c);
   virtual void add(TP_connection *);
@@ -143,6 +145,7 @@ struct TP_pool_unix :TP_pool
 {
   TP_pool_unix();
   ~TP_pool_unix();
+  virtual int init();
   virtual TP_connection *new_connection(CONNECT *c);
   virtual void add(TP_connection *);
   virtual int set_pool_size(uint);

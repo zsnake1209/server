@@ -351,11 +351,18 @@ static bool tp_init()
 
 #ifdef _WIN32
   pool = new (std::nothrow) TP_pool_win;
-  return 0;
 #else
   pool= new (std::nothrow) TP_pool_unix;
-  return 0;
 #endif
+  if (!pool)
+    return true;
+  if (pool->init())
+  {
+    delete pool;
+    pool= 0;
+    return true;
+  }
+  return false;
 }
 
 static void tp_add_connection(CONNECT *connect)

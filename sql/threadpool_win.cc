@@ -443,6 +443,9 @@ static void CALLBACK work_callback(PTP_CALLBACK_INSTANCE instance, PVOID context
 }
 
 TP_pool_win::TP_pool_win()
+{}
+
+int TP_pool_win::init()
 {
   fls= FlsAlloc(thread_destructor);
   pool= CreateThreadpool(NULL);
@@ -452,7 +455,7 @@ TP_pool_win::TP_pool_win()
     sql_print_error("Can't create threadpool. "
       "CreateThreadpool() failed with %d. Likely cause is memory pressure",
       GetLastError());
-    exit(1);
+    return -1;
   }
 
   InitializeThreadpoolEnvironment(&callback_environ);
@@ -486,6 +489,7 @@ TP_pool_win::TP_pool_win()
         "SetThreadpoolStackInformation");
     }
   }
+  return 0;
 }
 
 
@@ -494,6 +498,8 @@ TP_pool_win::TP_pool_win()
 */
 TP_pool_win::~TP_pool_win()
 {
+  if (!pool)
+    return;
   DestroyThreadpoolEnvironment(&callback_environ);
   SetThreadpoolThreadMaximum(pool, 0);
   CloseThreadpool(pool);
