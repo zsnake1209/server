@@ -122,6 +122,7 @@ struct TP_pool
   virtual int set_pool_size(uint){ return 0; }
   virtual int set_idle_timeout(uint){ return 0; }
   virtual int set_oversubscribe(uint){ return 0; }
+  virtual int set_stall_limit(uint){ return 0; }
   virtual int get_thread_count() { return tp_stats.num_worker_threads; }
   virtual int get_idle_thread_count(){ return 0; }
 };
@@ -141,11 +142,10 @@ struct TP_pool_win:TP_pool
 struct TP_pool_unix :TP_pool
 {
   TP_pool_unix();
+  ~TP_pool_unix();
   virtual TP_connection *new_connection(CONNECT *c);
   virtual void add(TP_connection *);
-  virtual int set_max_threads(uint);
   virtual int set_pool_size(uint);
-  virtual int set_idle_timeout(uint);
-  virtual int set_oversubscribe(uint);
+  virtual int set_stall_limit(uint);
   virtual int get_idle_thread_count();
 };

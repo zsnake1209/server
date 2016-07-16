@@ -344,15 +344,17 @@ static bool tp_end_thread(THD *, bool)
   return 0;
 }
 
-TP_pool *pool;
+static TP_pool *pool;
 
 static bool tp_init()
 {
+
 #ifdef _WIN32
   pool = new (std::nothrow) TP_pool_win;
   return 0;
 #else
-#error No threadpool
+  pool= new (std::nothrow) TP_pool_unix;
+  return 0;
 #endif
 }
 
@@ -387,6 +389,19 @@ void tp_set_max_threads(uint val)
 {
   if (pool)
     pool->set_max_threads(val);
+}
+
+void tp_set_threadpool_size(uint val)
+{
+  if (pool)
+    pool->set_pool_size(val);
+}
+
+
+void tp_set_threadpool_stall_limit(uint val)
+{
+  if (pool)
+    pool->set_stall_limit(val);
 }
 
 
@@ -432,6 +447,7 @@ static void tp_end()
 {
   delete pool;
 }
+
 
 static scheduler_functions tp_scheduler_functions=
 {

@@ -13,11 +13,11 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifdef _WIN32_winT
-#undef _WIN32_winT
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
 #endif
 
-#define _WIN32_winT 0x0601
+#define _WIN32_WINNT 0x0601
 
 #include <my_global.h>
 #include <violite.h>
@@ -64,9 +64,9 @@ static void tp_log_warning(const char *msg, const char *fct)
 }
 
 
-PTP_POOL pool;
-TP_CALLBACK_ENVIRON callback_environ;
-DWORD fls;
+static PTP_POOL pool;
+static TP_CALLBACK_ENVIRON callback_environ;
+static DWORD fls;
 
 static bool skip_completion_port_on_success = false;
 
