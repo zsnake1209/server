@@ -91,8 +91,8 @@ struct TP_connection
   TP_connection(CONNECT *c) :
     thd(0),
     connect(c),
-    priority(TP_PRIORITY_NONE),
-    state(TP_STATE_IDLE)
+    state(TP_STATE_IDLE),
+    priority(TP_PRIORITY_NONE)
   {}
 
   virtual ~TP_connection()

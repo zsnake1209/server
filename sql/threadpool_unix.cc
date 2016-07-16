@@ -30,7 +30,7 @@
 #ifdef HAVE_IOCP
 #define OPTIONAL_IO_POLL_READ_PARAM &overlapped
 #else 
-#define OPTIONAL_IOCP_READ_PARAM 0
+#define OPTIONAL_IO_POLL_READ_PARAM 0
 #endif
 
 #include <sql_connect.h>
@@ -134,7 +134,19 @@ worker_list_t;
 
 struct TP_connection_unix:public TP_connection
 {
-  TP_connection_unix(CONNECT *c);
+  TP_connection_unix(CONNECT *c):
+    TP_connection(c),
+    thread_group(0),
+    next_in_queue(0),
+    prev_in_queue(0),
+    abs_wait_timeout(ULONGLONG_MAX),
+    bound_to_poll_descriptor(false),
+    waiting(false)
+#ifdef HAVE_IOCP
+    ,overlapped()
+#endif
+   {
+   }
   virtual int init(){ return 0; };
   virtual void set_io_timeout(int sec);
   virtual int  start_io();
@@ -1060,7 +1072,7 @@ static int wake_listener(thread_group_t *thread_group)
 
   /* Wake listener */
   if (io_poll_associate_fd(thread_group->pollfd,
-    thread_group->shutdown_pipe[0], NULL))
+    thread_group->shutdown_pipe[0], NULL, NULL))
   {
     return -1;
   }
@@ -1303,23 +1315,6 @@ void wait_end(thread_group_t *thread_group)
 }
 
 
-/**
-  Allocate/initialize a new connection structure.
-*/
-
-TP_connection_unix::TP_connection_unix(CONNECT *c):
-  TP_connection(c),
-  waiting(false),
-  bound_to_poll_descriptor(false),
-  abs_wait_timeout(ULONGLONG_MAX),
-  thread_group(0),
-  next_in_queue(0),
-  prev_in_queue(0),
-#ifdef HAVE_IOCP
-  overlapped()
-#endif
-{
-}
 
 
 TP_connection * TP_pool_unix::new_connection(CONNECT *c)
@@ -1378,9 +1373,8 @@ void TP_connection_unix::wait_begin(int type)
 void TP_connection_unix::wait_end() 
 { 
   DBUG_ENTER("wait_end");
-  DBUG_ASSERT(thd);
   DBUG_ASSERT(waiting);
-  waiting = false;
+  waiting= false;
   ::wait_end(thread_group);
   DBUG_VOID_RETURN;
 }
