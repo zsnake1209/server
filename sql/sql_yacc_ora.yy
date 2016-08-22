@@ -3493,7 +3493,7 @@ loop_body:
         ;
 
 while_body:
-          expr DO_SYM
+          expr LOOP_SYM
           {
             LEX *lex= Lex;
             sp_head *sp= lex->sphead;
@@ -3509,7 +3509,7 @@ while_body:
             if (sp->restore_lex(thd))
               MYSQL_YYABORT;
           }
-          sp_proc_stmts1 END WHILE_SYM
+          sp_proc_stmts1 END LOOP_SYM
           {
             LEX *lex= Lex;
             uint ip= lex->sphead->instructions();
