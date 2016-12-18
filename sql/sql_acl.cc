@@ -1171,6 +1171,16 @@ static bool set_user_plugin (ACL_USER *user, int password_len)
   }
 }
 
+class Sql_mode_save
+{
+ public:
+  Sql_mode_save(THD *thd) : thd(thd), old_mode(thd->variables.sql_mode) {}
+  ~Sql_mode_save() { thd->variables.sql_mode = old_mode; }
+
+ private:
+  THD *thd;
+  sql_mode_t old_mode; // SQL mode saved at construction time.
+};
 
 /*
   Initialize structures responsible for user/db-level privilege checking
@@ -1192,11 +1202,10 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
 {
   TABLE *table;
   READ_RECORD read_record_info;
-  bool return_val= TRUE;
   bool check_no_resolve= specialflag & SPECIAL_NO_RESOLVE;
   char tmp_name[SAFE_NAME_LEN+1];
   int password_length;
-  sql_mode_t old_sql_mode= thd->variables.sql_mode;
+  Sql_mode_save old_mode_save(thd);
   DBUG_ENTER("acl_load");
 
   thd->variables.sql_mode&= ~MODE_PAD_CHAR_TO_FULL_LENGTH;
@@ -1208,13 +1217,13 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
   {
     if (init_read_record(&read_record_info, thd, table, NULL, NULL,
                          1, 1, FALSE))
-      goto end;
+      DBUG_RETURN(TRUE);
     table->use_all_columns();
     while (!(read_record_info.read_record(&read_record_info)))
     {
       ACL_HOST host;
       update_hostname(&host.host,get_field(&acl_memroot, table->field[0]));
-      host.db=	 get_field(&acl_memroot, table->field[1]);
+      host.db= get_field(&acl_memroot, table->field[1]);
       if (lower_case_table_names && host.db)
       {
         /*
@@ -1237,7 +1246,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
       }
       host.access= get_access(table,2);
       host.access= fix_rights_for_db(host.access);
-      host.sort=	 get_sort(2,host.host.hostname,host.db);
+      host.sort=   get_sort(2,host.host.hostname,host.db);
       if (check_no_resolve && hostname_requires_resolving(host.host.hostname))
       {
         sql_print_warning("'host' entry '%s|%s' "
@@ -1263,7 +1272,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
 
   if (init_read_record(&read_record_info, thd, table=tables[USER_TABLE].table,
                        NULL, NULL, 1, 1, FALSE))
-    goto end;
+    DBUG_RETURN(TRUE);
   table->use_all_columns();
 
   username_char_length= MY_MIN(table->field[1]->char_length(),
@@ -1274,7 +1283,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
   {
     sql_print_error("Fatal error: mysql.user table is damaged or in "
                     "unsupported 3.20 format.");
-    goto end;
+    DBUG_RETURN(TRUE);
   }
 
   DBUG_PRINT("info",("user table fields: %d, password length: %d",
@@ -1288,7 +1297,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
       mysql_mutex_unlock(&LOCK_global_system_variables);
       sql_print_error("Fatal error: mysql.user table is in old format, "
                       "but server started with --secure-auth option.");
-      goto end;
+      DBUG_RETURN(TRUE);
     }
     mysql_user_table_is_in_short_password_format= true;
     if (global_system_variables.old_passwords)
@@ -1521,7 +1530,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
 
   if (init_read_record(&read_record_info, thd, table=tables[DB_TABLE].table,
                        NULL, NULL, 1, 1, FALSE))
-    goto end;
+    DBUG_RETURN(TRUE);
   table->use_all_columns();
   while (!(read_record_info.read_record(&read_record_info)))
   {
@@ -1588,7 +1597,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
   {
     if (init_read_record(&read_record_info, thd, table,
                          NULL, NULL, 1, 1, FALSE))
-      goto end;
+      DBUG_RETURN(TRUE);
     table->use_all_columns();
     while (!(read_record_info.read_record(&read_record_info)))
     {
@@ -1597,10 +1606,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
       if (proxy.check_validity(check_no_resolve))
         continue;
       if (push_dynamic(&acl_proxy_users, (uchar*) &proxy))
-      {
-        end_read_record(&read_record_info);
-        goto end;
-      }
+        DBUG_RETURN(TRUE);
     }
     my_qsort((uchar*) dynamic_element(&acl_proxy_users, 0, ACL_PROXY_USER*),
              acl_proxy_users.elements,
@@ -1618,7 +1624,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
   {
     if (init_read_record(&read_record_info, thd, table, NULL, NULL, 1, 1,
                          FALSE))
-      goto end;
+      DBUG_RETURN(TRUE);
     table->use_all_columns();
 
     MEM_ROOT temp_root;
@@ -1656,12 +1662,7 @@ static bool acl_load(THD *thd, TABLE_LIST *tables)
   init_check_host();
 
   initialized=1;
-  return_val= FALSE;
-
-end:
-  end_read_record(&read_record_info);
-  thd->variables.sql_mode= old_sql_mode;
-  DBUG_RETURN(return_val);
+  DBUG_RETURN(FALSE);
 }
 
 
