@@ -284,7 +284,7 @@ fil_read(
 	void*			buf)
 {
 	return(fil_io(IORequestRead, true, page_id, page_size,
-			byte_offset, len, buf, NULL, NULL));
+			byte_offset, len, buf, NULL));
 }
 
 /** Writes data to a space from a buffer. Remember that the possible incomplete
@@ -312,7 +312,7 @@ fil_write(
 	ut_ad(!srv_read_only_mode);
 
 	return(fil_io(IORequestWrite, true, page_id, page_size,
-		      byte_offset, len, buf, NULL, NULL));
+		      byte_offset, len, buf, NULL));
 }
 
 /*******************************************************************//**
@@ -1115,7 +1115,7 @@ fil_write_zeros(
 		err = os_aio(
 			request, OS_AIO_SYNC, node->name,
 			node->handle, buf, offset, n_bytes, read_only_mode,
-			NULL, NULL, NULL);
+			NULL, NULL);
 
 		if (err != DB_SUCCESS) {
 			break;
@@ -5357,8 +5357,6 @@ fil_io_set_encryption(
 			aligned
 @param[in] message	message for aio handler if non-sync aio
 			used, else ignored
-@param[in] write_size	actual payload size when written
-                        to avoid extra punch holes in compression
 @return DB_SUCCESS, DB_TABLESPACE_DELETED or DB_TABLESPACE_TRUNCATED
 	if we are trying to do i/o on a tablespace which does not exist */
 dberr_t
@@ -5370,8 +5368,7 @@ fil_io(
 	ulint			byte_offset,
 	ulint			len,
 	void*			buf,
-	void*			message,
-	ulint*			write_size)
+	void*			message)
 {
 	os_offset_t		offset;
 	IORequest		req_type(type);
@@ -5640,7 +5637,7 @@ fil_io(
 		mode, name, node->handle, buf, offset, len,
 		space->purpose != FIL_TYPE_TEMPORARY
 		&& srv_read_only_mode,
-		node, message, write_size);
+		node, message);
 
 	if (err == DB_IO_NO_PUNCH_HOLE) {
 

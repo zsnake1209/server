@@ -840,7 +840,12 @@ buf_page_is_corrupted(
 {
 	ulint		checksum_field1;
 	ulint		checksum_field2;
-	bool page_encrypted = false;
+	bool		page_encrypted = false;
+	bool		page_compressed = false;
+	ulint		page_type = mach_read_from_2(read_buf+FIL_PAGE_TYPE);
+
+	page_compressed = (page_type == FIL_PAGE_PAGE_COMPRESSED_ENCRYPTED
+		           || page_type == FIL_PAGE_PAGE_COMPRESSED);
 
 #ifndef UNIV_INNOCHECKSUM
 	ulint 		space_id = mach_read_from_4(
@@ -857,7 +862,7 @@ buf_page_is_corrupted(
 	}
 #else
 	if (mach_read_from_4(read_buf+FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION) != 0
-	    || mach_read_from_2(read_buf+FIL_PAGE_TYPE) == FIL_PAGE_PAGE_COMPRESSED_ENCRYPTED) {
+	    || page_type == FIL_PAGE_PAGE_COMPRESSED_ENCRYPTED) {
 		page_encrypted = true;
 	}
 
@@ -865,7 +870,7 @@ buf_page_is_corrupted(
 
 	DBUG_EXECUTE_IF("buf_page_is_corrupt_failure", return(TRUE); );
 
-	if (!page_encrypted && !page_size.is_compressed()
+	if (!page_encrypted && !page_compressed && !page_size.is_compressed()
 	    && memcmp(read_buf + FIL_PAGE_LSN + 4,
 		      read_buf + page_size.logical()
 		      - FIL_PAGE_END_LSN_OLD_CHKSUM + 4, 4)) {
@@ -933,7 +938,7 @@ buf_page_is_corrupted(
 						 page_size.physical()));
 #endif /* UNIV_INNOCHECKSUM */
 	}
-	if (page_encrypted) {
+	if (page_encrypted || page_compressed) {
 		return (FALSE);
 	}
 

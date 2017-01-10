@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2016, MariaDB Corporation.
+Copyright (c) 2013, 2017, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted
 by Percona Inc.. Those modifications are
@@ -37,6 +37,7 @@ Created 10/21/1995 Heikki Tuuri
 #define os0file_h
 
 #include "univ.i"
+#include "page0size.h"
 
 #ifndef _WIN32
 #include <dirent.h>
@@ -554,6 +555,8 @@ public:
 	/** Default constructor */
 	IORequest()
 		:
+		m_page_size(univ_page_size),
+		m_write_size(NULL),
 		m_block_size(UNIV_SECTOR_SIZE),
 		m_type(READ),
 		m_compression()
@@ -566,6 +569,8 @@ public:
 					ORed from the above enum */
 	explicit IORequest(ulint type)
 		:
+		m_page_size(univ_page_size),
+		m_write_size(NULL),
 		m_block_size(UNIV_SECTOR_SIZE),
 		m_type(static_cast<uint16_t>(type)),
 		m_compression()
@@ -579,8 +584,57 @@ public:
 		}
 	}
 
+	/**
+	@param[in]	type		Request type, can be a value that is
+					ORed from the above enum
+	@param[in]	page_size	Page size
+	@param[in]	write_size	Actual write size */
+	IORequest(ulint type,
+		const page_size_t& page_size,
+		ulint*		write_size)
+		:
+		m_page_size(page_size),
+		m_write_size(write_size),
+		m_block_size(UNIV_SECTOR_SIZE),
+		m_type(static_cast<uint16_t>(type)),
+		m_compression()
+	{
+		if (is_log()) {
+			disable_compression();
+		}
+
+		if (!is_punch_hole_supported()) {
+			clear_punch_hole();
+		}
+	}
+
+	/** operator =
+	@param[in]	from		Source to copy */
+	IORequest& operator=(const IORequest& from)
+	{
+		m_page_size.copy_from(from.m_page_size);
+		m_write_size = from.m_write_size;
+		m_block_size = from.m_block_size;
+		m_type = from.m_type;
+		m_compression = from.m_compression;
+		return (*this);
+	}
+
 	/** Destructor */
 	~IORequest() { }
+
+	/** Copy constructor.
+	@param[in]	from		source. */
+	IORequest(const IORequest& from)
+		: m_page_size(from.m_page_size.physical(),
+			from.m_page_size.logical(),
+			from.m_page_size.is_compressed()),
+		m_write_size(from.m_write_size),
+		m_block_size(from.m_block_size),
+		m_type(from.m_type),
+		m_compression(from.m_compression)
+	{
+	}
 
 	/** @return true if ignore missing flag is set */
 	static bool ignore_missing(ulint type)
@@ -686,6 +740,22 @@ public:
 	void block_size(ulint block_size)
 	{
 		m_block_size = static_cast<uint32_t>(block_size);
+	}
+
+	/** Set the write size variable for later use.
+	@param[in] write_size		Write size variable */
+	void write_size(ulint* write_size)
+	{
+		m_write_size = write_size;
+	}
+
+	/** Set the actual write size done in IO
+	@param[in] write_size		Write size to set */
+	void write_size(ulint write_size)
+	{
+		if (m_write_size) {
+			*m_write_size = write_size;
+		}
 	}
 
 	/** Clear all compression related flags */
@@ -823,8 +893,27 @@ public:
 #endif /* HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE || _WIN32 */
 	}
 
+	ulint physical() const
+	{
+		return m_page_size.physical();
+	}
+
+	bool need_trim(ulint len) const
+	{
+		return (m_write_size && len >= *(m_write_size));
+	}
+
 private:
-	/* File system best block size */
+	/** Page size */
+	page_size_t	m_page_size;
+
+	/** Actual write size initialized after fist
+	successfull trim i.e. punch hole operation for
+	this page and if initialized we do not trim
+	again if actual page size does not decrease.*/
+	ulint*			m_write_size;
+
+	/** File system best block size */
 	uint32_t		m_block_size;
 
 	/** Request type bit flags */
@@ -1197,10 +1286,10 @@ The wrapper functions have the prefix of "innodb_". */
 # define os_file_close(file)						\
 	pfs_os_file_close_func(file, __FILE__, __LINE__)
 
-# define os_aio(type, mode, name, file, buf, offset,			\
-	n, read_only, message1, message2, wsize)			\
-	pfs_os_aio_func(type, mode, name, file, buf, offset,		\
-		n, read_only, message1, message2, wsize,		\
+# define os_aio(type, mode, name, file, buf, offset,		\
+	n, read_only, message1, message2)			\
+	pfs_os_aio_func(type, mode, name, file, buf, offset,	\
+		n, read_only, message1, message2,		\
 			__FILE__, __LINE__)
 
 # define os_file_read(type, file, buf, offset, n)			\
@@ -1212,7 +1301,7 @@ The wrapper functions have the prefix of "innodb_". */
 
 # define os_file_write(type, name, file, buf, offset, n)	\
 	pfs_os_file_write_func(type, name, file, buf, offset,	\
-			       n, __FILE__, __LINE__)
+		n,__FILE__, __LINE__)
 
 # define os_file_flush(file)						\
 	pfs_os_file_flush_func(file, __FILE__, __LINE__)
@@ -1417,7 +1506,6 @@ pfs_os_aio_func(
 	bool		read_only,
 	fil_node_t*	m1,
 	void*		m2,
-	ulint*		wsize,
 	const char*	src_file,
 	ulint		src_line);
 
@@ -1542,9 +1630,9 @@ to original un-instrumented file I/O APIs */
 # define os_file_close(file)	os_file_close_func(file)
 
 # define os_aio(type, mode, name, file, buf, offset,			\
-	n, read_only, message1, message2, wsize)			\
+	n, read_only, message1, message2)			\
 	os_aio_func(type, mode, name, file, buf, offset,		\
-		n, read_only, message1, message2, wsize)
+		n, read_only, message1, message2)
 
 # define os_file_read(type, file, buf, offset, n)			\
 	os_file_read_func(type, file, buf, offset, n)
@@ -1552,7 +1640,7 @@ to original un-instrumented file I/O APIs */
 # define os_file_read_no_error_handling(type, file, buf, offset, n, o)	\
 	os_file_read_no_error_handling_func(type, file, buf, offset, n, o)
 
-# define os_file_write(type, name, file, buf, offset, n)		\
+# define os_file_write(type, name, file, buf, offset, n)	\
 	os_file_write_func(type, name, file, buf, offset, n)
 
 # define os_file_flush(file)	os_file_flush_func(file)
@@ -1815,8 +1903,7 @@ os_aio_func(
 	ulint		n,
 	bool		read_only,
 	fil_node_t*	m1,
-	void*		m2,
-	ulint*		wsize);
+	void*		m2);
 
 /** Wakes up all async i/o threads so that they know to exit themselves in
 shutdown. */
@@ -2004,6 +2091,16 @@ is_absolute_path(
 
 	return(false);
 }
+
+/***********************************************************************//**
+Try to get number of bytes per sector from file system.
+@return	file block size */
+UNIV_INTERN
+ulint
+os_file_get_block_size(
+/*===================*/
+	os_file_t	file,	/*!< in: handle to a file */
+	const char*	name);	/*!< in: file name */
 
 #ifndef UNIV_NONINL
 #include "os0file.ic"

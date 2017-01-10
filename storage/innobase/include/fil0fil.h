@@ -1247,11 +1247,6 @@ fil_space_get_n_reserved_extents(
 				aligned
 @param[in]	message		message for aio handler if non-sync aio
 				used, else ignored
-@param[in,out]	write_size	Actual write size initialized
-				after fist successfull trim
-				operation for this page and if
-				nitialized we do not trim again if
-				Actual page
 
 @return DB_SUCCESS, DB_TABLESPACE_DELETED or DB_TABLESPACE_TRUNCATED
 if we are trying to do i/o on a tablespace which does not exist */
@@ -1264,8 +1259,7 @@ fil_io(
 	ulint			byte_offset,
 	ulint			len,
 	void*			buf,
-	void*			message,
-	ulint*			write_size);
+	void*			message);
 /**********************************************************************//**
 Waits for an aio operation to complete. This function is used to write the
 handler for completed requests. The aio array of pending requests is divided

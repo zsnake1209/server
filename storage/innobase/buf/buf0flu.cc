@@ -1093,11 +1093,15 @@ buf_flush_write_block_low(
 
 		ulint	type = IORequest::WRITE | IORequest::DO_NOT_WAKE;
 
-		IORequest	request(type);
+		IORequest	request(type, bpage->size, (ulint *)&bpage->write_size);
+
+		if (bpage->real_size != bpage->size.physical()) {
+			request.set_punch_hole();
+		}
 
 		fil_io(request,
 		       sync, bpage->id, bpage->size, 0, bpage->size.physical(),
-			frame, bpage, NULL);
+			frame, bpage);
 	} else {
 		if (flush_type == BUF_FLUSH_SINGLE_PAGE) {
 			buf_dblwr_write_single_page(bpage, sync);

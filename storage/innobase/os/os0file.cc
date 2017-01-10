@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2016, MariaDB Corporation.
+Copyright (c) 2013, 2017, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted
 by Percona Inc.. Those modifications are
@@ -42,6 +42,11 @@ Created 10/21/1995 Heikki Tuuri
 
 #ifdef UNIV_NONINL
 #include "os0file.ic"
+#endif
+
+#ifdef UNIV_LINUX
+#include <sys/types.h>
+#include <sys/stat.h>
 #endif
 
 #include "srv0srv.h"
@@ -257,8 +262,6 @@ struct Slot {
 
 	/** buffer used in i/o */
 	byte*			buf;
-	ulint		is_log;		/*!< 1 if OS_FILE_LOG or 0 */
-	ulint		page_size;      /*!< UNIV_PAGE_SIZE or zip_size */
 
 	/** Buffer pointer used for actual IO. We advance this
 	when partial IO is required and not buf */
@@ -338,8 +341,6 @@ struct Slot {
 
 	/** true, if we shouldn't punch a hole after writing the page */
 	bool			skip_punch_hole;
-
-	ulint*			write_size;
 };
 
 /** The asynchronous i/o array structure */
@@ -381,8 +382,7 @@ public:
 		const char*	name,
 		void*		buf,
 		os_offset_t	offset,
-		ulint		len,
-		ulint*		write_size)
+		ulint		len)
 		MY_ATTRIBUTE((warn_unused_result));
 
 	/** @return number of reserved slots */
@@ -790,23 +790,16 @@ os_file_handle_error_no_exit(
 	const char*	operation,
 	bool		silent);
 
-/** Decompress after a read and punch a hole in the file if it was a write
+/** Punch a hole in the file if it was a write
 @param[in]	type		IO context
 @param[in]	fh		Open file handle
-@param[in,out]	buf		Buffer to transform
-@param[in,out]	scratch		Scratch area for read decompression
-@param[in]	src_len		Length of the buffer before compression
-@param[in]	len		Compressed buffer length for write and size
-				of buf len for read
+@param[in]	len		Compressed buffer length for write
 @return DB_SUCCESS or error code */
 static
 dberr_t
 os_file_io_complete(
-	const IORequest&type,
+	IORequest&	type,
 	os_file_t	fh,
-	byte*		buf,
-	byte*		scratch,
-	ulint		src_len,
 	ulint		offset,
 	ulint		len);
 
@@ -831,6 +824,69 @@ os_aio_simulated_handler(
 	fil_node_t**	m1,
 	void**		m2,
 	IORequest*	type);
+
+/***********************************************************************//**
+Try to get number of bytes per sector from file system.
+@return	file block size */
+UNIV_INTERN
+ulint
+os_file_get_block_size(
+/*===================*/
+	os_file_t	file,	/*!< in: handle to a file */
+	const char*	name)	/*!< in: file name */
+{
+	ulint		fblock_size = 512;
+
+#if defined(UNIV_LINUX)
+	struct stat local_stat;
+	int		err;
+
+	err = fstat((int)file, &local_stat);
+
+	if (err != 0) {
+		ib::warn() << "fstat() failed on file " << name
+			   << " error "<< errno << " : " << strerror(errno);
+		os_file_handle_error_no_exit(name, "fstat()", FALSE);
+	} else {
+		fblock_size = local_stat.st_blksize;
+	}
+#endif /* UNIV_LINUX */
+#ifdef _WIN32
+	DWORD outsize;
+	STORAGE_PROPERTY_QUERY storageQuery;
+	memset(&storageQuery, 0, sizeof(STORAGE_PROPERTY_QUERY));
+	storageQuery.PropertyId = StorageAccessAlignmentProperty;
+	storageQuery.QueryType  = PropertyStandardQuery;
+
+	STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR diskAlignment = {0};
+	memset(&diskAlignment, 0, sizeof(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR));
+
+	if (!DeviceIoControl(file,
+		IOCTL_STORAGE_QUERY_PROPERTY,
+		&storageQuery,
+		sizeof(STORAGE_PROPERTY_QUERY),
+		&diskAlignment,
+		sizeof(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR),
+		&outsize,
+		NULL)
+		) {
+		os_file_handle_error_no_exit(name, "DeviceIOControl()", FALSE);
+	}
+
+	fblock_size = diskAlignment.BytesPerPhysicalSector;
+#endif /* _WIN32 */
+
+	/* Currently we support file block size up to 4Kb */
+	if (fblock_size > 4096 || fblock_size < 512) {
+		if (fblock_size < 512) {
+			fblock_size = 512;
+		} else {
+			fblock_size = 4096;
+		}
+	}
+
+	return fblock_size;
+}
 
 #ifdef WIN_ASYNC_IO
 /** This function is only used in Windows asynchronous i/o.
@@ -953,8 +1009,8 @@ public:
 		ut_a(slot->type.is_read() || !slot->skip_punch_hole);
 
 		return(os_file_io_complete(
-				slot->type, slot->file, slot->buf,
-				slot->compressed_page, slot->original_len,
+				const_cast<IORequest&>(slot->type),
+				slot->file,
 				static_cast<ulint>(slot->offset),
 				slot->len));
 	}
@@ -1659,85 +1715,78 @@ os_file_read_string(
 	}
 }
 
-/** Decompress after a read and punch a hole in the file if it was a write
+/** Punch a hole in the file if it was a write
 @param[in]	type		IO context
 @param[in]	fh		Open file handle
-@param[in,out]	buf		Buffer to transform
-@param[in,out]	scratch		Scratch area for read decompression
-@param[in]	src_len		Length of the buffer before compression
-@param[in]	len		Used buffer length for write and output
-				buf len for read
+@param[in]	len		Compressed buffer length for write
 @return DB_SUCCESS or error code */
 static
 dberr_t
 os_file_io_complete(
-	const IORequest&type,
+	IORequest&	type,
 	os_file_t	fh,
-	byte*		buf,
-	byte*		scratch,
-	ulint		src_len,
 	ulint		offset,
 	ulint		len)
 {
-#ifdef MYSQL_ENCRYPTION
-	/* We never compress/decompress the first page */
+	dberr_t err;
 	ut_a(offset > 0);
 	ut_ad(type.validate());
+	ut_ad(type.punch_hole());
+	ut_ad(!type.is_log());
+	ut_ad(type.is_write());
 
-	if (!type.is_compression_enabled()) {
+	/* We have calculated the correct write length already
+	in fil_compress_page() */
+	ulint trim_len = type.physical() - len;
+
+	// Nothing to do if trim length is zero or if actual write
+	// size is initialized and it is smaller than current write size.
+	// In first write if we trim we set write_size to actual bytes
+	// written and rest of the page is trimmed. In following writes
+	// there is no need to trim again if write_size only increases
+	// because rest of the page is already trimmed. If actual write
+	// size decreases we need to trim again.
+	if (trim_len == 0 || !type.need_trim(len)) {
+
+		type.write_size(len);
 
 		return(DB_SUCCESS);
-
-	} else if (type.is_read()) {
-		dberr_t		ret = DB_SUCCESS;
-		Encryption	encryption(type.encryption_algorithm());
-
-		ut_ad(!type.is_log());
-
-		ret = encryption.decrypt(type, buf, src_len, scratch, len);
-		if (ret == DB_SUCCESS) {
-			return(os_file_decompress_page(
-					type.is_dblwr_recover(),
-					buf, scratch, len));
-		} else {
-			return(ret);
-		}
-
-	} else if (type.punch_hole()) {
-
-		ut_ad(len <= src_len);
-		ut_ad(!type.is_log());
-		ut_ad(type.is_write());
-		ut_ad(type.is_compressed());
-
-		/* Nothing to do. */
-		if (len == src_len) {
-			return(DB_SUCCESS);
-		}
-
-#ifdef UNIV_DEBUG
-		const ulint	block_size = type.block_size();
-#endif /* UNIV_DEBUG */
-
-		/* We don't support multiple page sizes in the server
-		at the moment. */
-		ut_ad(src_len == srv_page_size);
-
-		/* Must be a multiple of the compression unit size. */
-		ut_ad((len % block_size) == 0);
-		ut_ad((offset % block_size) == 0);
-
-		ut_ad(len + block_size <= src_len);
-
-		offset += len;
-
-		return(os_file_punch_hole(fh, offset, src_len - len));
 	}
 
-	ut_ad(!type.is_log());
-#endif /* MYSQL_ENCRYPTION */
+	offset += len;
 
-	return(DB_SUCCESS);
+	err = os_file_punch_hole(fh, offset, trim_len);
+
+	if (err == DB_SUCCESS) {
+		ulint amount = trim_len / type.block_size();
+		switch(type.block_size()) {
+		case 512:
+			srv_stats.page_compression_trim_sect512.add(amount);
+			break;
+		case 1024:
+			srv_stats.page_compression_trim_sect1024.add(amount);
+			break;
+		case 2948:
+			srv_stats.page_compression_trim_sect2048.add(amount);
+			break;
+		case 4096:
+			srv_stats.page_compression_trim_sect4096.add(amount);
+			break;
+		case 8192:
+			srv_stats.page_compression_trim_sect8192.add(amount);
+			break;
+		case 16384:
+			srv_stats.page_compression_trim_sect16384.add(amount);
+			break;
+		case 32768:
+			srv_stats.page_compression_trim_sect32768.add(amount);
+			break;
+		default:
+			break;
+		}
+	}
+
+	return (err);
 }
 
 /** This function returns a new path name after replacing the basename
@@ -2516,14 +2565,13 @@ LinuxAIOHandler::collect()
 			/* We have not overstepped to next segment. */
 			ut_a(slot->pos < end_pos);
 
-			/* We never compress/decompress the first page */
+			/* Deallocate unused blocks from file system.
+			This is newer done to page 0 or to log files.*/
 
 			if (slot->offset > 0
 			    && !slot->skip_punch_hole
-			    && slot->type.is_compression_enabled()
 			    && !slot->type.is_log()
 			    && slot->type.is_write()
-			    && slot->type.is_compressed()
 			    && slot->type.punch_hole()) {
 
 				slot->err = AIOHandler::io_complete(slot);
@@ -4252,6 +4300,7 @@ os_file_punch_hole_win32(
 		fh, FSCTL_SET_ZERO_DATA, &punch, sizeof(punch),
 		NULL, 0, &temp, NULL);
 
+
 	return(!result ? DB_IO_NO_PUNCH_HOLE : DB_SUCCESS);
 }
 
@@ -5525,10 +5574,10 @@ os_file_io(
 {
 	ulint		original_n = n;
 	IORequest	type = in_type;
-	byte*		compressed_page=NULL;
 	ssize_t		bytes_returned = 0;
 
 #ifdef MYSQL_COMPRESSION
+	byte*		compressed_page=NULL;
 	Block*		block=NULL;
 	if (type.is_compressed()) {
 
@@ -5579,13 +5628,15 @@ os_file_io(
 			bytes_returned += n_bytes;
 
 			if (offset > 0
-			    && (type.is_compressed() || type.is_read())) {
+			    && !type.is_log()
+			    && type.is_write()
+			    && type.punch_hole()) {
 
 				*err = os_file_io_complete(
-					type, file,
-					reinterpret_cast<byte*>(buf),
-					compressed_page, original_n,
-					static_cast<ulint>(offset), n);
+					const_cast<IORequest&>(type),
+					file,
+					static_cast<ulint>(offset),
+					n);
 
 			} else {
 
@@ -5695,7 +5746,7 @@ os_file_write_page(
 
 	ut_ad(type.validate());
 	ut_ad(n > 0);
-	
+
 	ssize_t	n_bytes = os_file_pwrite(type, file, buf, n, offset, &err);
 
 	if ((ulint) n_bytes != n && !os_has_said_disk_full) {
@@ -6263,11 +6314,19 @@ os_file_punch_hole(
 		return(DB_SUCCESS);
 	);
 
+	dberr_t err;
+
 #ifdef _WIN32
-	return(os_file_punch_hole_win32(fh, off, len));
+	err = os_file_punch_hole_win32(fh, off, len);
 #else
-	return(os_file_punch_hole_posix(fh, off, len));
+	err = os_file_punch_hole_posix(fh, off, len);
 #endif /* _WIN32 */
+
+	if (err == DB_SUCCESS) {
+		srv_stats.page_compressed_trim_op.inc();
+	}
+
+	return (err);
 }
 
 /** Check if the file system supports sparse files.
@@ -6920,12 +6979,7 @@ AIO::reserve_slot(
 	const char*	name,
 	void*		buf,
 	os_offset_t	offset,
-	ulint		len,
-	ulint*		write_size)/*!< in/out: Actual write size initialized
-			       after fist successfull trim
-			       operation for this page and if
-			       initialized we do not trim again if
-			       actual page size does not decrease. */
+	ulint		len)
 {
 #ifdef WIN_ASYNC_IO
 	ut_a((len & 0xFFFFFFFFUL) == len);
@@ -7015,12 +7069,11 @@ AIO::reserve_slot(
 	slot->ptr      = slot->buf;
 	slot->offset   = offset;
 	slot->err      = DB_SUCCESS;
-	slot->write_size = write_size;
-	slot->is_log   = type.is_log();
 	slot->original_len = static_cast<uint32>(len);
 	slot->io_already_done = false;
 	slot->buf_block = NULL;
 	slot->buf      = static_cast<byte*>(buf);
+	slot->skip_punch_hole = type.punch_hole();
 
 #ifdef MYSQL_COMPRESSION
 	if (srv_use_native_aio
@@ -7440,6 +7493,7 @@ Requests an asynchronous i/o operation.
 @param[in,out]	m2		message for the AIO handler (can be used to
 				identify a completed AIO operation); ignored
 				if mode is OS_AIO_SYNC
+
 @return DB_SUCCESS or error code */
 dberr_t
 os_aio_func(
@@ -7452,12 +7506,7 @@ os_aio_func(
 	ulint		n,
 	bool		read_only,
 	fil_node_t*	m1,
-	void*		m2,
-	ulint*		write_size)/*!< in/out: Actual write size initialized
-			       after fist successfull trim
-			       operation for this page and if
-			       initialized we do not trim again if
-			       actual page size does not decrease. */
+	void*		m2)
 {
 #ifdef WIN_ASYNC_IO
 	BOOL		ret = TRUE;
@@ -7493,7 +7542,7 @@ try_again:
 
 	Slot*	slot;
 
-	slot = array->reserve_slot(type, m1, m2, file, name, buf, offset, n, write_size);
+	slot = array->reserve_slot(type, m1, m2, file, name, buf, offset, n);
 
 	if (type.is_read()) {
 
