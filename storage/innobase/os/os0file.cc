@@ -112,6 +112,10 @@ bool	innodb_calling_exit;
 #include "snappy-c.h"
 #endif
 
+#ifdef _WIN32
+#include <winioctl.h>
+#endif
+
 /** Insert buffer segment id */
 static const ulint IO_IBUF_SEGMENT = 0;
 
@@ -825,6 +829,47 @@ os_aio_simulated_handler(
 	void**		m2,
 	IORequest*	type);
 
+#ifdef _WIN32
+static HANDLE win_get_syncio_event();
+#endif
+
+#ifdef _WIN32
+/**
+ Wrapper around Windows DeviceIoControl() function.
+
+ Works synchronously, also in case for handle opened
+ for async access (i.e with FILE_FLAG_OVERLAPPED).
+
+ Accepts the same parameters as DeviceIoControl(),except
+ last parameter (OVERLAPPED).
+*/
+static
+BOOL
+os_win32_device_io_control(
+	HANDLE handle,
+	DWORD code,
+	LPVOID inbuf,
+	DWORD inbuf_size,
+	LPVOID outbuf,
+	DWORD outbuf_size,
+	LPDWORD bytes_returned
+)
+{
+	OVERLAPPED overlapped = { 0 };
+	overlapped.hEvent = win_get_syncio_event();
+	BOOL result = DeviceIoControl(handle, code, inbuf, inbuf_size, outbuf,
+		outbuf_size, bytes_returned, &overlapped);
+
+	if (!result && (GetLastError() == ERROR_IO_PENDING)) {
+		/* Wait for async io to complete */
+		result = GetOverlappedResult(handle, &overlapped, bytes_returned, TRUE);
+	}
+
+	return result;
+}
+
+#endif
+
 /***********************************************************************//**
 Try to get number of bytes per sector from file system.
 @return	file block size */
@@ -854,23 +899,22 @@ os_file_get_block_size(
 #ifdef _WIN32
 	DWORD outsize;
 	STORAGE_PROPERTY_QUERY storageQuery;
-	memset(&storageQuery, 0, sizeof(STORAGE_PROPERTY_QUERY));
+	memset(&storageQuery, 0, sizeof(storageQuery));
 	storageQuery.PropertyId = StorageAccessAlignmentProperty;
 	storageQuery.QueryType  = PropertyStandardQuery;
+	STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR diskAlignment;
 
-	STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR diskAlignment = {0};
-	memset(&diskAlignment, 0, sizeof(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR));
-
-	if (!DeviceIoControl(file,
+	BOOL result = os_win32_device_io_control(file,
 		IOCTL_STORAGE_QUERY_PROPERTY,
 		&storageQuery,
 		sizeof(STORAGE_PROPERTY_QUERY),
 		&diskAlignment,
 		sizeof(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR),
-		&outsize,
-		NULL)
-		) {
-		os_file_handle_error_no_exit(name, "DeviceIOControl()", FALSE);
+		&outsize);
+
+	if (!result) {
+		os_file_handle_error_no_exit(name, "DeviceIoControl()", FALSE);
+		fblock_size = 0;
 	}
 
 	fblock_size = diskAlignment.BytesPerPhysicalSector;
@@ -4266,9 +4310,20 @@ os_is_sparse_file_supported_win32(const char* filename)
 
 	DWORD	flags;
 
-	GetVolumeInformation(
+	result = GetVolumeInformation(
 		volname, NULL, MAX_PATH, NULL, NULL,
 		&flags, NULL, MAX_PATH);
+
+
+	if (!result) {
+		ib::error()
+			<< "os_is_sparse_file_supported: "
+			<< "Failed to get the volume info for: "
+			<< volname
+			<< "- OS error number " << GetLastError();
+
+		return(false);
+	}
 
 	return(flags & FILE_SUPPORTS_SPARSE_FILES) ? true : false;
 }
@@ -4295,13 +4350,11 @@ os_file_punch_hole_win32(
 	/* If lpOverlapped is NULL, lpBytesReturned cannot be NULL,
 	therefore we pass a dummy parameter. */
 	DWORD	temp;
-
-	BOOL	result = DeviceIoControl(
+	BOOL	success = os_win32_device_io_control(
 		fh, FSCTL_SET_ZERO_DATA, &punch, sizeof(punch),
-		NULL, 0, &temp, NULL);
+		NULL, 0, &temp);
 
-
-	return(!result ? DB_IO_NO_PUNCH_HOLE : DB_SUCCESS);
+	return(success ? DB_SUCCESS: DB_IO_NO_PUNCH_HOLE);
 }
 
 /** Check the existence and type of the given file.
@@ -4612,9 +4665,9 @@ os_file_create_simple_func(
 			/* This is a best effort use case, if it fails then
 			we will find out when we try and punch the hole. */
 
-			DeviceIoControl(
+			os_win32_device_io_control(
 				file, FSCTL_SET_SPARSE, NULL, 0, NULL, 0,
-				&temp, NULL);
+				&temp);
 		}
 
 	} while (retry);
@@ -4971,9 +5024,9 @@ os_file_create_func(
 
 			/* This is a best effort use case, if it fails then
 			we will find out when we try and punch the hole. */
-			DeviceIoControl(
+			os_win32_device_io_control(
 				file, FSCTL_SET_SPARSE, NULL, 0, NULL, 0,
-				&temp, NULL);
+				&temp);
 		}
 
 	} while (retry);
@@ -5411,27 +5464,6 @@ os_file_get_status_win32(
 
 		stat_info->block_size = bytesPerSector * sectorsPerCluster;
 
-		/* On Windows the block size is not used as the allocation
-		unit for sparse files. The underlying infra-structure for
-		sparse files is based on NTFS compression. The punch hole
-		is done on a "compression unit". This compression unit
-		is based on the cluster size. You cannot punch a hole if
-		the cluster size >= 8K. For smaller sizes the table is
-		as follows:
-
-		Cluster Size	Compression Unit
-		512 Bytes		 8 KB
-		  1 KB			16 KB
-		  2 KB			32 KB
-		  4 KB			64 KB
-
-		Default NTFS cluster size is 4K, compression unit size of 64K.
-		Therefore unless the user has created the file system with
-		a smaller cluster size and used larger page sizes there is
-		little benefit from compression out of the box. */
-
-		stat_info->block_size = (stat_info->block_size <= 4096)
-			?  stat_info->block_size * 16 : ULINT_UNDEFINED;
 	} else {
 		stat_info->type = OS_FILE_TYPE_UNKNOWN;
 	}
