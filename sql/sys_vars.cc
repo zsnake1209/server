@@ -1,5 +1,5 @@
 /* Copyright (c) 2002, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2012, 2016, MariaDB Corporation
+   Copyright (c) 2012, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -641,6 +641,7 @@ static bool check_cs_client(sys_var *self, THD *thd, set_var *var)
   if (check_charset_not_null(self, thd, var))
     return true;
 
+  // Currently, UCS-2 cannot be used as a client character set
   if (!is_supported_parser_charset((CHARSET_INFO *)(var->save_result.ptr)))
     return true;
 
@@ -5467,6 +5468,13 @@ static Sys_var_ulong Sys_log_tc_size(
        DEFAULT(my_getpagesize() * 6),
        BLOCK_SIZE(my_getpagesize()));
 #endif
+
+static Sys_var_ulonglong Sys_max_thread_mem(
+       "max_session_mem_used", "Amount of memory a single user session "
+       "is allowed to allocate. This limits the value of the "
+       "session variable MEM_USED", SESSION_VAR(max_mem_used),
+       CMD_LINE(REQUIRED_ARG), VALID_RANGE(8192,  ULONGLONG_MAX),
+       DEFAULT(LONGLONG_MAX), BLOCK_SIZE(1));
 
 #ifndef EMBEDDED_LIBRARY
 

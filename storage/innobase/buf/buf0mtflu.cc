@@ -383,7 +383,7 @@ DECLARE_THREAD(mtflush_io_thread)(void* arg)
 		}
 	}
 
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 	OS_THREAD_DUMMY_RETURN;
 }
 

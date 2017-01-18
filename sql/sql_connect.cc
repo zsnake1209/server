@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2007, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2014, SkySQL Ab.
+   Copyright (c) 2008, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -789,6 +789,7 @@ void update_global_user_stats(THD *thd, bool create_user, time_t now)
 
 bool thd_init_client_charset(THD *thd, uint cs_number)
 {
+  SV *gv=&global_system_variables;
   CHARSET_INFO *cs;
   /*
    Use server character set and collation if
@@ -799,9 +800,10 @@ bool thd_init_client_charset(THD *thd, uint cs_number)
   if (!opt_character_set_client_handshake ||
       !(cs= get_charset(cs_number, MYF(0))))
   {
-    thd->update_charset(global_system_variables.character_set_client,
-                        global_system_variables.collation_connection,
-                        global_system_variables.character_set_results);
+    DBUG_ASSERT(is_supported_parser_charset(gv->character_set_client));
+    thd->update_charset(gv->character_set_client,
+                        gv->collation_connection,
+                        gv->character_set_results);
   }
   else
   {

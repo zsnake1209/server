@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2016, MariaDB
+   Copyright (c) 2008, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -7347,12 +7347,12 @@ int TABLE::update_virtual_fields(enum_vcol_update_mode update_mode)
   DBUG_PRINT("enter", ("update_mode: %d", update_mode));
   Field **vfield_ptr, *vf;
   Turn_errors_to_warnings_handler Suppress_errors;
-  int error;
+  Query_arena backup_arena;
+  int error= 0;
   bool handler_pushed= 0;
   DBUG_ASSERT(vfield);
 
-  error= 0;
-  in_use->reset_arena_for_cached_items(expr_arena);
+  in_use->set_n_backup_active_arena(expr_arena, &backup_arena);
 
   /* When reading or deleting row, ignore errors from virtual columns */
   if (update_mode == VCOL_UPDATE_FOR_READ ||
@@ -7362,6 +7362,7 @@ int TABLE::update_virtual_fields(enum_vcol_update_mode update_mode)
     in_use->push_internal_handler(&Suppress_errors);
     handler_pushed= 1;
   }
+
   /* Iterate over virtual fields in the table */
   for (vfield_ptr= vfield; *vfield_ptr; vfield_ptr++)
   {
@@ -7435,7 +7436,7 @@ int TABLE::update_virtual_fields(enum_vcol_update_mode update_mode)
   }
   if (handler_pushed)
     in_use->pop_internal_handler();
-  in_use->reset_arena_for_cached_items(0);
+  in_use->restore_active_arena(expr_arena, &backup_arena);
   
   /* Return 1 only of we got a fatal error, not a warning */
   DBUG_RETURN(in_use->is_error());
@@ -7443,13 +7444,14 @@ int TABLE::update_virtual_fields(enum_vcol_update_mode update_mode)
 
 int TABLE::update_virtual_field(Field *vf)
 {
+  Query_arena backup_arena;
   DBUG_ENTER("TABLE::update_virtual_field");
 
-  in_use->reset_arena_for_cached_items(expr_arena);
+  in_use->set_n_backup_active_arena(expr_arena, &backup_arena);
   bitmap_clear_all(&tmp_set);
   vf->vcol_info->expr->walk(&Item::update_vcol_processor, 0, &tmp_set);
   vf->vcol_info->expr->save_in_field(vf, 0);
-  in_use->reset_arena_for_cached_items(0);
+  in_use->restore_active_arena(expr_arena, &backup_arena);
   DBUG_RETURN(0);
 }
 
@@ -7478,10 +7480,11 @@ int TABLE::update_default_fields(bool update_command, bool ignore_errors)
 {
   DBUG_ENTER("TABLE::update_default_fields");
   Field **field_ptr;
+  Query_arena backup_arena;
   int res= 0;
   DBUG_ASSERT(default_field);
 
-  in_use->reset_arena_for_cached_items(expr_arena);
+  in_use->set_n_backup_active_arena(expr_arena, &backup_arena);
 
   /* Iterate over fields with default functions in the table */
   for (field_ptr= default_field; *field_ptr ; field_ptr++)
@@ -7509,7 +7512,7 @@ int TABLE::update_default_fields(bool update_command, bool ignore_errors)
       res= 0;
     }
   }
-  in_use->reset_arena_for_cached_items(0);
+  in_use->restore_active_arena(expr_arena, &backup_arena);
   DBUG_RETURN(res);
 }
 

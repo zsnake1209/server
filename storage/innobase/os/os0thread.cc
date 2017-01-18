@@ -166,9 +166,33 @@ os_thread_create_func(
 	return((os_thread_t)new_thread_id);
 }
 
+/** Waits until the specified thread completes and joins it.
+Its return value is ignored.
+@param[in,out]	thread	thread to join */
+void
+os_thread_join(os_thread_t thread)
+{
+#ifdef __WIN__
+	/* Do nothing. */
+#else
+#ifdef UNIV_DEBUG
+	const int	ret =
+#endif /* UNIV_DEBUG */
+	pthread_join(thread, NULL);
+
+	/* Waiting on already-quit threads is allowed. */
+	ut_ad(ret == 0 || ret == ESRCH);
+#endif /* __WIN__ */
+}
+
 /** Exits the current thread. */
 void
-os_thread_exit()
+os_thread_exit(
+	void*	exit_value,	/*!< in: exit value; in Windows this void*
+				is cast as a DWORD */
+	bool	detach)		/*!< in: if true, the thread will be detached
+				right before exiting. If false, another thread
+				is responsible for joining this thread. */
 {
 #ifdef UNIV_DEBUG_THREAD_CREATION
 	ib::info() << "Thread exits, id "
@@ -180,17 +204,16 @@ os_thread_exit()
 #endif
 
 	mutex_enter(&thread_mutex);
-
 	os_thread_count--;
+	mutex_exit(&thread_mutex);
 
 #ifdef _WIN32
-	mutex_exit(&thread_mutex);
-
 	ExitThread(0);
 #else
-	mutex_exit(&thread_mutex);
-	pthread_detach(pthread_self());
-	pthread_exit(NULL);
+	if (detach) {
+		pthread_detach(pthread_self());
+	}
+	pthread_exit(exit_value);
 #endif
 }
 

@@ -582,9 +582,6 @@ fts_zip_read_word(
 	fts_zip_t*	zip,		/*!< in: Zip state + data */
 	fts_string_t*	word)		/*!< out: uncompressed word */
 {
-#ifdef UNIV_DEBUG
-	ulint		i;
-#endif
 	short		len = 0;
 	void*		null = NULL;
 	byte*		ptr = word->f_str;
@@ -660,10 +657,9 @@ fts_zip_read_word(
 		}
 	}
 
-#ifdef UNIV_DEBUG
 	/* All blocks must be freed at end of inflate. */
 	if (zip->status != Z_OK) {
-		for (i = 0; i < ib_vector_size(zip->blocks); ++i) {
+		for (ulint i = 0; i < ib_vector_size(zip->blocks); ++i) {
 			if (ib_vector_getp(zip->blocks, i)) {
 				ut_free(ib_vector_getp(zip->blocks, i));
 				ib_vector_set(zip->blocks, i, &null);
@@ -674,7 +670,6 @@ fts_zip_read_word(
 	if (ptr != NULL) {
 		ut_ad(word->f_len == strlen((char*) ptr));
 	}
-#endif /* UNIV_DEBUG */
 
 	return(zip->status == Z_OK || zip->status == Z_STREAM_END ? ptr : NULL);
 }
@@ -3142,7 +3137,7 @@ fts_optimize_thread(
 
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;
 }

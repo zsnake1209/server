@@ -391,10 +391,11 @@ this many index pages, there are 2 ways to calculate statistics:
   in the innodb database.
 * quick transient stats, that are used if persistent stats for the given
   table/index are not found in the innodb database */
-unsigned long long	srv_stats_transient_sample_pages = 8;
-my_bool		srv_stats_persistent = TRUE;
-unsigned long long	srv_stats_persistent_sample_pages = 20;
-my_bool		srv_stats_auto_recalc = TRUE;
+UNIV_INTERN unsigned long long	srv_stats_transient_sample_pages = 8;
+UNIV_INTERN my_bool		srv_stats_persistent = TRUE;
+UNIV_INTERN my_bool		srv_stats_include_delete_marked = FALSE;
+UNIV_INTERN unsigned long long	srv_stats_persistent_sample_pages = 20;
+UNIV_INTERN my_bool		srv_stats_auto_recalc = TRUE;
 
 /* The number of rows modified before we calculate new statistics (default 0
 = current limits) */
@@ -1867,7 +1868,7 @@ exit_func:
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
 
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;
 }
@@ -1981,7 +1982,7 @@ loop:
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
 
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;
 }
@@ -2592,7 +2593,7 @@ suspend_thread:
 	}
 
 	my_thread_end();
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 	DBUG_RETURN(0);
 }
 
@@ -2736,7 +2737,7 @@ DECLARE_THREAD(srv_worker_thread)(
 	my_thread_end();
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;	/* Not reached, avoid compiler warning */
 }
@@ -3063,7 +3064,7 @@ DECLARE_THREAD(srv_purge_coordinator_thread)(
 	my_thread_end();
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;	/* Not reached, avoid compiler warning */
 }

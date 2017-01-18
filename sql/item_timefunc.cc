@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2016, MariaDB
+   Copyright (c) 2009, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -426,7 +426,7 @@ static bool extract_date_time(DATE_TIME_FORMAT *format,
     {
       if (!my_isspace(&my_charset_latin1,*val))
       {
-	make_truncated_value_warning(current_thd,
+        make_truncated_value_warning(current_thd,
                                      Sql_condition::WARN_LEVEL_WARN,
                                      val_begin, length,
 				     cached_timestamp_type, NullS);
@@ -711,7 +711,7 @@ static bool get_interval_info(const char *str,uint length,CHARSET_INFO *cs,
   {
     longlong value;
     const char *start= str;
-    for (value=0; str != end && my_isdigit(cs, *str) ; str++)
+    for (value= 0; str != end && my_isdigit(cs, *str); str++)
       value= value*10 + *str - '0';
     msec_length= 6 - (str - start);
     values[i]= value;
@@ -1464,8 +1464,9 @@ void Item_temporal_func::fix_length_and_dec()
   /*
     We set maybe_null to 1 as default as any bad argument with date or
     time can get us to return NULL.
-  */ 
+  */
   maybe_null= (arg_count > 0);
+
   if (decimals)
   {
     if (decimals == NOT_FIXED_DEC)

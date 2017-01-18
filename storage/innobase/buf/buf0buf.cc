@@ -3181,7 +3181,7 @@ DECLARE_THREAD(buf_resize_thread)(void*)
 	srv_buf_resize_thread_active = false;
 
 	my_thread_end();
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;
 }

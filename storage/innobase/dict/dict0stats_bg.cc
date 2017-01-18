@@ -448,7 +448,7 @@ DECLARE_THREAD(dict_stats_thread)(void*)
 
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit instead of return(). */
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 
 	OS_THREAD_DUMMY_RETURN;
 }

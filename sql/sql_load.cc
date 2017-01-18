@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2016, MariaDB
+   Copyright (c) 2010, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1463,7 +1463,7 @@ READ_INFO::READ_INFO(THD *thd, File file_par, uint tot_length, CHARSET_INFO *cs,
   stack= stack_pos= (int*) thd->alloc(sizeof(int) * length);
 
   if (data.reserve(tot_length))
-    error=1; /* purecov: inspected */
+    error= 1; /* purecov: inspected */
   else
   {
     if (init_io_cache(&cache,(get_it_from_net) ? -1 : file, 0,

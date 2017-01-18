@@ -843,6 +843,6 @@ DECLARE_THREAD(btr_defragment_thread)(
 		}
 	}
 	btr_defragment_shutdown();
-	os_thread_exit();
+	os_thread_exit(NULL, false);
 	OS_THREAD_DUMMY_RETURN;
 }
