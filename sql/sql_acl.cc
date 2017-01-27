@@ -869,6 +869,9 @@ class User_table
     NUM_USER_TABLE_COLUMNS
   };
 
+  static const int FIRST_PRIVILEGE_COLUMN= SELECT_PRIV;
+  static const int LAST_PRIVILEGE_COLUMN= CREATE_TABLESPACE_PRIV;
+
   static const char * const user_table_col_names[NUM_USER_TABLE_COLUMNS];
 
   User_table(const TABLE& user_table) :
@@ -3570,7 +3573,7 @@ bool hostname_requires_resolving(const char *hostname)
 
 static bool update_user_table(THD *thd, TABLE *table,
                               const char *host, const char *user,
-			      const char *new_password, uint new_password_len)
+                              const char *new_password, uint new_password_len)
 {
   char user_key[MAX_KEY_LENGTH];
   int error;
@@ -3578,8 +3581,17 @@ static bool update_user_table(THD *thd, TABLE *table,
   DBUG_PRINT("enter",("user: %s  host: %s",user,host));
 
   table->use_all_columns();
-  table->field[0]->store(host,(uint) strlen(host), system_charset_info);
-  table->field[1]->store(user,(uint) strlen(user), system_charset_info);
+  User_table u_table(*table);
+  if (!u_table.column(User_table::HOST) && !u_table.column(User_table::USER))
+  {
+    my_error(ER_INVALID_SYSTEM_TABLE, MYF(0), "user");
+    DBUG_RETURN(1);
+  }
+
+  u_table.column(User_table::HOST)->store(host,(uint) strlen(host),
+                                          system_charset_info);
+  u_table.column(User_table::USER)->store(user,(uint) strlen(user),
+                                          system_charset_info);
   key_copy((uchar *) user_key, table->record[0], table->key_info,
            table->key_info->key_length);
 
@@ -3592,7 +3604,33 @@ static bool update_user_table(THD *thd, TABLE *table,
     DBUG_RETURN(1);				/* purecov: deadcode */
   }
   store_record(table,record[1]);
-  table->field[2]->store(new_password, new_password_len, system_charset_info);
+
+  /* If we have the password column, store the password there. Otherwise
+     look for PLUGIN and AUTHENTICATION_STRING columns and set it there. */
+  if (u_table.have_password_column())
+    u_table.column(User_table::PASSWORD)->store(new_password, new_password_len,
+                                                system_charset_info);
+  else if (u_table.column(User_table::PLUGIN) &&
+           u_table.column(User_table::AUTHENTICATION_STRING))
+  {
+    if (new_password_len == SCRAMBLED_PASSWORD_CHAR_LENGTH)
+      u_table.column(User_table::PLUGIN)->store(
+        native_password_plugin_name.str, native_password_plugin_name.length,
+        system_charset_info);
+    else
+      u_table.column(User_table::PLUGIN)->store(
+        old_password_plugin_name.str, old_password_plugin_name.length,
+        system_charset_info);
+
+    u_table.column(User_table::AUTHENTICATION_STRING)->store(
+        new_password, new_password_len, system_charset_info);
+  }
+  else
+  {
+    my_error(ER_INVALID_SYSTEM_TABLE, MYF(0), "user");
+    DBUG_RETURN(1);
+  }
+
   if ((error=table->file->ha_update_row(table->record[1],table->record[0])) &&
       error != HA_ERR_RECORD_IS_THE_SAME)
   {
@@ -3643,7 +3681,7 @@ static bool test_if_create_new_users(THD *thd)
 ****************************************************************************/
 
 static int replace_user_table(THD *thd, TABLE *table, LEX_USER &combo,
-			      ulong rights, bool revoke_grant,
+                              ulong rights, bool revoke_grant,
                               bool can_create_user, bool no_auto_create)
 {
   int error = -1;
@@ -3669,8 +3707,9 @@ static int replace_user_table(THD *thd, TABLE *table, LEX_USER &combo,
   else
     combo.pwhash= empty_lex_str;
 
+  User_table u_table(*table);
   /* if the user table is not up to date, we can't handle role updates */
-  if (table->s->fields <= ROLE_ASSIGN_COLUMN_IDX && handle_as_role)
+  if (!u_table.have_is_role_column() && handle_as_role)
   {
     my_error(ER_COL_COUNT_DOESNT_MATCH_PLEASE_UPDATE, MYF(0),
              table->alias.c_ptr(), ROLE_ASSIGN_COLUMN_IDX + 1, table->s->fields,
@@ -3679,10 +3718,18 @@ static int replace_user_table(THD *thd, TABLE *table, LEX_USER &combo,
   }
 
   table->use_all_columns();
-  table->field[0]->store(combo.host.str,combo.host.length,
-                         system_charset_info);
-  table->field[1]->store(combo.user.str,combo.user.length,
-                         system_charset_info);
+
+  if (!u_table.column(User_table::HOST) || !u_table.column(User_table::USER))
+  {
+    my_error(ER_INVALID_SYSTEM_TABLE, MYF(0), "user");
+    DBUG_RETURN(-1);
+  }
+
+  u_table.column(User_table::HOST)->store(combo.host.str,combo.host.length,
+                                          system_charset_info);
+  u_table.column(User_table::USER)->store(combo.user.str,combo.user.length,
+                                          system_charset_info);
+
   key_copy(user_key, table->record[0], table->key_info,
            table->key_info->key_length);
 
@@ -3730,10 +3777,10 @@ static int replace_user_table(THD *thd, TABLE *table, LEX_USER &combo,
 
     old_row_exists = 0;
     restore_record(table,s->default_values);
-    table->field[0]->store(combo.host.str,combo.host.length,
-                           system_charset_info);
-    table->field[1]->store(combo.user.str,combo.user.length,
-                           system_charset_info);
+    u_table.column(User_table::HOST)->store(combo.host.str,combo.host.length,
+                                            system_charset_info);
+    u_table.column(User_table::USER)->store(combo.user.str,combo.user.length,
+                                            system_charset_info);
   }
   else
   {
@@ -3747,116 +3794,155 @@ static int replace_user_table(THD *thd, TABLE *table, LEX_USER &combo,
 
   /* Update table columns with new privileges */
 
-  Field **tmp_field;
-  ulong priv;
-  uint next_field;
-  for (tmp_field= table->field+3, priv = SELECT_ACL;
-       *tmp_field && (*tmp_field)->real_type() == MYSQL_TYPE_ENUM &&
-	 ((Field_enum*) (*tmp_field))->typelib->count == 2 ;
-       tmp_field++, priv <<= 1)
+  for (ulong privilege_column_idx = User_table::FIRST_PRIVILEGE_COLUMN,
+             priv= SELECT_ACL;
+       privilege_column_idx <= User_table::LAST_PRIVILEGE_COLUMN;
+       privilege_column_idx++, priv <<= 1)
   {
-    if (priv & rights)				 // set requested privileges
-      (*tmp_field)->store(&what, 1, &my_charset_latin1);
+    Field *priv_column= u_table.column(
+        static_cast<User_table::user_table_columns>(privilege_column_idx));
+    if ((priv & rights) && priv_column)
+        priv_column->store(&what, 1, &my_charset_latin1);
   }
-  rights= get_access(*table, 3, &next_field);
+  rights= u_table.get_user_access();
+
   DBUG_PRINT("info",("table fields: %d",table->s->fields));
   if (combo.pwhash.str[0])
-    table->field[2]->store(combo.pwhash.str, combo.pwhash.length, system_charset_info);
-  if (table->s->fields >= 31)		/* From 4.0.0 we have more fields */
   {
+    /* If we have the password column, store the password there. Otherwise
+       look for PLUGIN and AUTHENTICATION_STRING columns and set it there. */
+    if (u_table.have_password_column())
+      u_table.column(User_table::PASSWORD)->store(combo.pwhash.str,
+                                                  combo.pwhash.length,
+                                                  system_charset_info);
+    else if (u_table.column(User_table::PLUGIN) &&
+             u_table.column(User_table::AUTHENTICATION_STRING))
+    {
+      if (combo.pwhash.length == SCRAMBLED_PASSWORD_CHAR_LENGTH)
+        u_table.column(User_table::PLUGIN)->store(
+          native_password_plugin_name.str, native_password_plugin_name.length,
+          system_charset_info);
+      else
+        u_table.column(User_table::PLUGIN)->store(
+          old_password_plugin_name.str, old_password_plugin_name.length,
+          system_charset_info);
+
+      u_table.column(User_table::AUTHENTICATION_STRING)->store(
+          combo.auth.str, combo.auth.length, system_charset_info);
+    }
+    else
+    {
+      my_error(ER_INVALID_SYSTEM_TABLE, MYF(0), "user");
+      DBUG_RETURN(-1);
+    }
+  }
+
+  if (u_table.column(User_table::SSL_TYPE) &&
+      u_table.column(User_table::SSL_CIPHER) &&
+      u_table.column(User_table::X509_ISSUER) &&
+      u_table.column(User_table::X509_SUBJECT))
+  {
+
     /* We write down SSL related ACL stuff */
     switch (lex->ssl_type) {
     case SSL_TYPE_ANY:
-      table->field[next_field]->store(STRING_WITH_LEN("ANY"),
-                                      &my_charset_latin1);
-      table->field[next_field+1]->store("", 0, &my_charset_latin1);
-      table->field[next_field+2]->store("", 0, &my_charset_latin1);
-      table->field[next_field+3]->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::SSL_TYPE)->store(STRING_WITH_LEN("ANY"),
+                                                  &my_charset_latin1);
+      u_table.column(User_table::SSL_CIPHER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_ISSUER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_SUBJECT)->store("", 0, &my_charset_latin1);
       break;
     case SSL_TYPE_X509:
-      table->field[next_field]->store(STRING_WITH_LEN("X509"),
-                                      &my_charset_latin1);
-      table->field[next_field+1]->store("", 0, &my_charset_latin1);
-      table->field[next_field+2]->store("", 0, &my_charset_latin1);
-      table->field[next_field+3]->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::SSL_TYPE)->store(STRING_WITH_LEN("X509"),
+                                                  &my_charset_latin1);
+      u_table.column(User_table::SSL_CIPHER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_ISSUER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_SUBJECT)->store("", 0, &my_charset_latin1);
       break;
     case SSL_TYPE_SPECIFIED:
-      table->field[next_field]->store(STRING_WITH_LEN("SPECIFIED"),
-                                      &my_charset_latin1);
-      table->field[next_field+1]->store("", 0, &my_charset_latin1);
-      table->field[next_field+2]->store("", 0, &my_charset_latin1);
-      table->field[next_field+3]->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::SSL_TYPE)->store(STRING_WITH_LEN("SPECIFIED"),
+                                                  &my_charset_latin1);
+      u_table.column(User_table::SSL_CIPHER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_ISSUER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_SUBJECT)->store("", 0, &my_charset_latin1);
+
       if (lex->ssl_cipher)
-        table->field[next_field+1]->store(lex->ssl_cipher,
-                                strlen(lex->ssl_cipher), system_charset_info);
+        u_table.column(User_table::SSL_CIPHER)->store(lex->ssl_cipher,
+                                                      strlen(lex->ssl_cipher),
+                                                      system_charset_info);
       if (lex->x509_issuer)
-        table->field[next_field+2]->store(lex->x509_issuer,
-                                strlen(lex->x509_issuer), system_charset_info);
+        u_table.column(User_table::X509_ISSUER)->store(lex->x509_issuer,
+                                                       strlen(lex->x509_issuer),
+                                                       system_charset_info);
       if (lex->x509_subject)
-        table->field[next_field+3]->store(lex->x509_subject,
-                                strlen(lex->x509_subject), system_charset_info);
+        u_table.column(User_table::X509_SUBJECT)->store(lex->x509_subject,
+                                                        strlen(lex->x509_subject),
+                                                        system_charset_info);
       break;
     case SSL_TYPE_NOT_SPECIFIED:
       break;
     case SSL_TYPE_NONE:
-      table->field[next_field]->store("", 0, &my_charset_latin1);
-      table->field[next_field+1]->store("", 0, &my_charset_latin1);
-      table->field[next_field+2]->store("", 0, &my_charset_latin1);
-      table->field[next_field+3]->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::SSL_TYPE)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::SSL_CIPHER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_ISSUER)->store("", 0, &my_charset_latin1);
+      u_table.column(User_table::X509_SUBJECT)->store("", 0, &my_charset_latin1);
       break;
     }
-    next_field+=4;
 
     USER_RESOURCES mqh= lex->mqh;
-    if (mqh.specified_limits & USER_RESOURCES::QUERIES_PER_HOUR)
-      table->field[next_field]->store((longlong) mqh.questions, TRUE);
-    if (mqh.specified_limits & USER_RESOURCES::UPDATES_PER_HOUR)
-      table->field[next_field+1]->store((longlong) mqh.updates, TRUE);
-    if (mqh.specified_limits & USER_RESOURCES::CONNECTIONS_PER_HOUR)
-      table->field[next_field+2]->store((longlong) mqh.conn_per_hour, TRUE);
-    if (table->s->fields >= 36 &&
-        (mqh.specified_limits & USER_RESOURCES::USER_CONNECTIONS))
-      table->field[next_field+3]->store((longlong) mqh.user_conn, FALSE);
-    next_field+= 4;
-    if (table->s->fields >= 41)
+    Field *column= NULL;
+    if ((mqh.specified_limits & USER_RESOURCES::QUERIES_PER_HOUR) &&
+        (column= u_table.column(User_table::MAX_QUESTIONS)))
+      column->store((longlong) mqh.questions, TRUE);
+    if ((mqh.specified_limits & USER_RESOURCES::UPDATES_PER_HOUR) &&
+        (column= u_table.column(User_table::MAX_UPDATES)))
+      column->store((longlong) mqh.updates, TRUE);
+    if ((mqh.specified_limits & USER_RESOURCES::CONNECTIONS_PER_HOUR) &&
+        (column= u_table.column(User_table::MAX_CONNECTIONS)))
+      column->store((longlong) mqh.conn_per_hour, TRUE);
+    if ((mqh.specified_limits & USER_RESOURCES::USER_CONNECTIONS) &&
+        (column= u_table.column(User_table::MAX_USER_CONNECTIONS)))
+      column->store((longlong) mqh.user_conn, FALSE);
+    if ((mqh.specified_limits & USER_RESOURCES::MAX_STATEMENT_TIME) &&
+        (column= u_table.column(User_table::MAX_STATEMENT_TIME)))
+      column->store(mqh.max_statement_time);
+
+    mqh_used= column &&
+               (mqh_used || mqh.questions || mqh.updates || mqh.conn_per_hour ||
+                mqh.user_conn || mqh.max_statement_time != 0.0);
+
+    if (u_table.column(User_table::PLUGIN) &&
+        u_table.column(User_table::AUTHENTICATION_STRING))
     {
-      table->field[next_field]->set_notnull();
-      table->field[next_field + 1]->set_notnull();
+      u_table.column(User_table::PLUGIN)->set_notnull();
+      u_table.column(User_table::AUTHENTICATION_STRING)->set_notnull();
       if (combo.plugin.str[0])
       {
         DBUG_ASSERT(combo.pwhash.str[0] == 0);
-        table->field[2]->reset();
-        table->field[next_field]->store(combo.plugin.str, combo.plugin.length,
-                                        system_charset_info);
-        table->field[next_field + 1]->store(combo.auth.str, combo.auth.length,
-                                            system_charset_info);
+        if (u_table.column(User_table::PASSWORD))
+          u_table.column(User_table::PASSWORD)->reset();
+        u_table.column(User_table::PLUGIN)->store(combo.plugin.str,
+                                                  combo.plugin.length,
+                                                  system_charset_info);
+        u_table.column(User_table::AUTHENTICATION_STRING)->store(
+            combo.auth.str, combo.auth.length, system_charset_info);
       }
       if (combo.pwhash.str[0])
       {
         DBUG_ASSERT(combo.plugin.str[0] == 0);
-        table->field[next_field]->reset();
-        table->field[next_field + 1]->reset();
-      }
-
-      if (table->s->fields > MAX_STATEMENT_TIME_COLUMN_IDX)
-      {
-        if (mqh.specified_limits & USER_RESOURCES::MAX_STATEMENT_TIME)
-          table->field[MAX_STATEMENT_TIME_COLUMN_IDX]->
-            store(mqh.max_statement_time);
+        u_table.column(User_table::PLUGIN)->reset();
+        u_table.column(User_table::AUTHENTICATION_STRING)->reset();
       }
     }
-    mqh_used= (mqh_used || mqh.questions || mqh.updates || mqh.conn_per_hour ||
-               mqh.user_conn || mqh.max_statement_time != 0.0);
 
     /* table format checked earlier */
     if (handle_as_role)
     {
-      User_table u_table(*table);
       if (old_row_exists && !u_table.check_is_role())
       {
         goto end;
       }
-      table->field[ROLE_ASSIGN_COLUMN_IDX]->store("Y", 1, system_charset_info);
+      u_table.column(User_table::IS_ROLE)->store("Y", 1, system_charset_info);
     }
   }
 
