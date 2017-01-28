@@ -260,10 +260,47 @@ public:
 /* Flag to mark that on_node was already called for this role */
 #define ROLE_OPENED             (1L << 3)
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
-static ulong get_sort(uint count,...);
-#endif // NO_EMBEDDED_ACCESS_CHECKS
+/*
+  Return a number which, if sorted 'desc', puts strings in this order:
+    no wildcards
+    wildcards
+    empty string
+*/
 
+static ulong get_sort(uint count,...)
+{
+  va_list args;
+  va_start(args,count);
+  ulong sort=0;
+
+  /* Should not use this function with more than 4 arguments for compare. */
+  DBUG_ASSERT(count <= 4);
+
+  while (count--)
+  {
+    char *start, *str= va_arg(args,char*);
+    uint chars= 0;
+    uint wild_pos= 0;           /* first wildcard position */
+
+    if ((start= str))
+    {
+      for (; *str ; str++)
+      {
+        if (*str == wild_prefix && str[1])
+          str++;
+        else if (*str == wild_many || *str == wild_one)
+        {
+          wild_pos= (uint) (str - start) + 1;
+          break;
+        }
+        chars= 128;                             // Marker that chars existed
+      }
+    }
+    sort= (sort << 8) + (wild_pos ? MY_MIN(wild_pos, 127U) : chars);
+  }
+  va_end(args);
+  return sort;
+}
 
 class ACL_USER_BASE :public ACL_ACCESS
 {
@@ -789,7 +826,6 @@ static Hash_filo<acl_entry> *acl_cache;
 static uint grant_version=0; /* Version of priv tables. incremented by acl_load */
 static ulong get_access(const TABLE &form, uint fieldnr, uint *next_field=0);
 static int acl_compare(ACL_ACCESS *a,ACL_ACCESS *b);
-static ulong get_sort(uint count,...);
 static void init_check_host(void);
 static void rebuild_check_host(void);
 static void rebuild_role_grants(void);
@@ -2123,48 +2159,6 @@ static ulong get_access(const TABLE &form, uint fieldnr, uint *next_field)
 }
 
 
-
-/*
-  Return a number which, if sorted 'desc', puts strings in this order:
-    no wildcards
-    wildcards
-    empty string
-*/
-
-static ulong get_sort(uint count,...)
-{
-  va_list args;
-  va_start(args,count);
-  ulong sort=0;
-
-  /* Should not use this function with more than 4 arguments for compare. */
-  DBUG_ASSERT(count <= 4);
-
-  while (count--)
-  {
-    char *start, *str= va_arg(args,char*);
-    uint chars= 0;
-    uint wild_pos= 0;           /* first wildcard position */
-
-    if ((start= str))
-    {
-      for (; *str ; str++)
-      {
-        if (*str == wild_prefix && str[1])
-          str++;
-        else if (*str == wild_many || *str == wild_one)
-        {
-          wild_pos= (uint) (str - start) + 1;
-          break;
-        }
-        chars= 128;                             // Marker that chars existed
-      }
-    }
-    sort= (sort << 8) + (wild_pos ? MY_MIN(wild_pos, 127U) : chars);
-  }
-  va_end(args);
-  return sort;
-}
 
 
 static int acl_compare(ACL_ACCESS *a,ACL_ACCESS *b)
