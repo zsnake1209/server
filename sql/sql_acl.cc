@@ -217,15 +217,16 @@ struct acl_host_and_ip
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
 static bool compare_hostname(const acl_host_and_ip *, const char *, const char *);
+static void update_hostname(acl_host_and_ip *host, const char *hostname);
 #else
 #define compare_hostname(X,Y,Z) 0
+#define update_hostname(X,Y,Z) do {} while(0)
 #endif
 
 class ACL_USER;
 class ACL_ROLE;
 
 static bool fix_and_copy_user(LEX_USER *to, LEX_USER *from, THD *thd);
-static void update_hostname(acl_host_and_ip *host, const char *hostname);
 static void set_user_salt(ACL_USER *acl_user, const char *password, uint password_len);
 static char *fix_plugin_ptr(char *name);
 static bool fix_user_plugin_ptr(ACL_USER *user);
