@@ -220,7 +220,7 @@ static bool compare_hostname(const acl_host_and_ip *, const char *, const char *
 static void update_hostname(acl_host_and_ip *host, const char *hostname);
 #else
 #define compare_hostname(X,Y,Z) 0
-#define update_hostname(X,Y,Z) do {} while(0)
+#define update_hostname(X,Y) do {} while(0)
 #endif
 
 class ACL_USER;
