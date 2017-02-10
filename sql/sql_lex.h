@@ -2547,7 +2547,9 @@ class Package_body: public Sql_alloc
 {
 public:
   List<LEX> m_lex_list;
-  Package_body()
+  struct LEX *m_top_level_lex;
+  Package_body(LEX *top_level_lex)
+   :m_top_level_lex(top_level_lex)
   {
     m_lex_list.elements= 0;
   }
@@ -3657,6 +3659,7 @@ public:
     /* Keep the parent SP stuff */
     sphead= oldlex->sphead;
     spcont= oldlex->spcont;
+    package_body= oldlex->package_body;
     /* Keep the parent trigger stuff too */
     trg_chistics= oldlex->trg_chistics;
     trg_table_fields.empty();
