@@ -1111,7 +1111,7 @@ loop:
 
 		ut_a(!IS_XTRABACKUP() || dict_check_if_skip_table);
 
-		if (is_temp || discarded || 
+		if (is_temp || discarded ||
 			(IS_XTRABACKUP() && dict_check_if_skip_table(name))) {
 			print_error_if_does_not_exist = false;
 		}

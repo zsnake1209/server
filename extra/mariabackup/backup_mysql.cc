@@ -113,18 +113,19 @@ xb_mysql_connect()
 	       opt_user, opt_password ? "set" : "not set",
 	       opt_port, opt_socket);
 
-
-	if (opt_use_ssl && false)
+#ifdef HAVE_OPENSSL
+	if (opt_use_ssl)
 	{
 		mysql_ssl_set(connection, opt_ssl_key, opt_ssl_cert,
-						opt_ssl_ca, opt_ssl_capath,
-						opt_ssl_cipher);
+			      opt_ssl_ca, opt_ssl_capath,
+			      opt_ssl_cipher);
 		mysql_options(connection, MYSQL_OPT_SSL_CRL, opt_ssl_crl);
 		mysql_options(connection, MYSQL_OPT_SSL_CRLPATH,
-						opt_ssl_crlpath);
-		mysql_options(connection, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
-			(char*)&opt_ssl_verify_server_cert);
+			      opt_ssl_crlpath);
 	}
+	mysql_options(connection,MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
+		      (char*)&opt_ssl_verify_server_cert);
+#endif
 
 	if (!mysql_real_connect(connection,
 				opt_host ? opt_host : "localhost",
@@ -1537,7 +1538,7 @@ bool write_backup_config_file()
 		"innodb_undo_tablespaces=%lu\n"
 		"%s%s\n"
 		"%s%s\n"
-    "%s\n",
+		"%s\n",
 		innodb_checksum_algorithm_names[srv_checksum_algorithm],
 		innodb_checksum_algorithm_names[srv_log_checksum_algorithm],
 		innobase_data_file_path,
@@ -1552,9 +1553,9 @@ bool write_backup_config_file()
 		innobase_buffer_pool_filename ?
 			"innodb_buffer_pool_filename=" : "",
 		innobase_buffer_pool_filename ?
-    innobase_buffer_pool_filename : "",
-    encryption_plugin_get_config());
-	return rc;
+			innobase_buffer_pool_filename : "",
+		encryption_plugin_get_config());
+		return rc;
 }
 
 

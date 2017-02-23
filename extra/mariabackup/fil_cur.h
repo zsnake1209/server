@@ -56,11 +56,11 @@ struct xb_fil_cur_t {
 					last cursor read */
 	ib_int64_t	buf_offset;	/*!< file offset of the first page in
 					buffer */
-  ulint		buf_page_no;	/*!< number of the first page in
+	ulint		buf_page_no;	/*!< number of the first page in
 					buffer */
 	uint		thread_n;	/*!< thread number for diagnostics */
-  ulint		space_id;	/*!< ID of tablespace */
-  ulint		space_size;	/*!< space size in pages */
+	ulint		space_id;	/*!< ID of tablespace */
+	ulint		space_size;	/*!< space size in pages */
 };
 
 typedef enum {

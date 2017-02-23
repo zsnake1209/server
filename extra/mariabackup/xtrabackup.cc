@@ -296,6 +296,10 @@ ulong	innobase_active_counter	= 0;
 
 
 static char *xtrabackup_debug_sync = NULL;
+
+my_bool xtrabackup_compact = FALSE;
+my_bool xtrabackup_rebuild_indexes = FALSE;
+
 my_bool xtrabackup_incremental_force_scan = FALSE;
 
 /* The flushed lsn which is read from data files */
@@ -559,6 +563,9 @@ enum options_xtrabackup
   OPT_INNODB_THREAD_CONCURRENCY,
   OPT_INNODB_THREAD_SLEEP_DELAY,
   OPT_XTRA_DEBUG_SYNC,
+  OPT_XTRA_COMPACT,
+  OPT_XTRA_REBUILD_INDEXES,
+  OPT_XTRA_REBUILD_THREADS,
   OPT_INNODB_CHECKSUM_ALGORITHM,
   OPT_INNODB_UNDO_DIRECTORY,
   OPT_INNODB_UNDO_TABLESPACES,
@@ -917,6 +924,23 @@ Disable with --skip-innodb-doublewrite.", (G_PTR*) &innobase_use_doublewrite,
    (G_PTR*) &xtrabackup_debug_sync,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #endif
+
+  {"compact", OPT_XTRA_COMPACT,
+   "Create a compact backup by skipping secondary index pages.",
+   (G_PTR*) &xtrabackup_compact, (G_PTR*) &xtrabackup_compact,
+   0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+
+  {"rebuild_indexes", OPT_XTRA_REBUILD_INDEXES,
+   "Rebuild secondary indexes in InnoDB tables after applying the log. "
+   "Only has effect with --prepare.",
+   (G_PTR*) &xtrabackup_rebuild_indexes, (G_PTR*) &xtrabackup_rebuild_indexes,
+   0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+
+  {"rebuild_threads", OPT_XTRA_REBUILD_THREADS,
+   "Use this number of threads to rebuild indexes in a compact backup. "
+   "Only has effect with --prepare and --rebuild-indexes.",
+   (G_PTR*) &xtrabackup_rebuild_threads, (G_PTR*) &xtrabackup_rebuild_threads,
+   0, GET_UINT, REQUIRED_ARG, 1, 1, UINT_MAX, 0, 0, 0},
 
   {"innodb_checksum_algorithm", OPT_INNODB_CHECKSUM_ALGORITHM,
   "The algorithm InnoDB uses for page checksumming. [CRC32, STRICT_CRC32, "
@@ -2140,37 +2164,36 @@ Checks if a given table name matches any of specifications in the --tables or
 static my_bool
 check_if_table_matches_filters(const char *name)
 {
-  int 			regres;
-  xb_filter_entry_t*	table;
-  xb_regex_list_node_t*	node;
+	int 			regres;
+	xb_filter_entry_t*	table;
+	xb_regex_list_node_t*	node;
 
-  if (UT_LIST_GET_LEN(regex_list)) {
-    /* Check against regular expressions list */
-    for (node = UT_LIST_GET_FIRST(regex_list); node;
-      node = UT_LIST_GET_NEXT(regex_list, node)) {
-      regres = regexec(&node->regex, name, 1,
-        tables_regmatch, 0);
-      if (regres != REG_NOMATCH) {
+	if (UT_LIST_GET_LEN(regex_list)) {
+		/* Check against regular expressions list */
+		for (node = UT_LIST_GET_FIRST(regex_list); node;
+		     node = UT_LIST_GET_NEXT(regex_list, node)) {
+			regres = regexec(&node->regex, name, 1,
+					    tables_regmatch, 0);
+			if (regres != REG_NOMATCH) {
 
-        return(TRUE);
-      }
-    }
-  }
+				return(TRUE);
+			}
+		}
+	}
 
-  if (tables_hash) {
-    HASH_SEARCH(name_hash, tables_hash, ut_fold_string(name),
-      xb_filter_entry_t*,
-      table, (void)0,
-      !strcmp(table->name, name));
-    if (table) {
+	if (tables_hash) {
+		HASH_SEARCH(name_hash, tables_hash, ut_fold_string(name),
+			    xb_filter_entry_t*,
+			    table, (void) 0,
+			    !strcmp(table->name, name));
+		if (table) {
 
-      return(TRUE);
-    }
-  }
+			return(TRUE);
+		}
+	}
 
-  return(FALSE);
+	return(FALSE);
 }
-
 
 /************************************************************************
 Checks if a table specified as a name in the form "database/name" (InnoDB 5.6)
@@ -2482,7 +2505,6 @@ xtrabackup_choose_lsn_offset(lsn_t start_lsn)
 		return;
 	}
 
-
 	if (server_flavor == FLAVOR_PERCONA_SERVER) {
 		/* it is Percona Server 5.5 */
 		group->alt_offset_chosen = true;
@@ -2490,13 +2512,11 @@ xtrabackup_choose_lsn_offset(lsn_t start_lsn)
 		return;
 	}
 
-
 	if (group->lsn_offset_alt == group->lsn_offset ||
 	    group->lsn_offset_alt == (lsn_t) -1) {
 		/* we have only one option */
 		return;
 	}
-
 
 	no = alt_no = (ulint) -1;
 	lsn_chosen = 0;
@@ -3116,7 +3136,6 @@ xb_fil_io_init(void)
 	fil_init(srv_file_per_table ? 50000 : 5000, LONG_MAX);
 
 	fsp_init();
-
 }
 
 /****************************************************************************
@@ -3131,7 +3150,7 @@ xb_load_tablespaces(void)
 	ibool	create_new_db;
 	ulint	err;
 	ulint   sum_of_new_sizes;
-  lsn_t min_arch_logno, max_arch_logno;
+	lsn_t min_arch_logno, max_arch_logno;
 
 	for (i = 0; i < srv_n_file_io_threads; i++) {
 		thread_nr[i] = i;
@@ -3143,7 +3162,7 @@ xb_load_tablespaces(void)
 	os_thread_sleep(200000); /*0.2 sec*/
 
 	err = open_or_create_data_files(&create_new_db,
-          &min_arch_logno, &max_arch_logno,
+					&min_arch_logno, &max_arch_logno,
 					&min_flushed_lsn, &max_flushed_lsn,
 					&sum_of_new_sizes);
 	if (err != DB_SUCCESS) {
@@ -3392,24 +3411,24 @@ static
 void
 xb_register_regex(
 /*==============*/
-const char* regex)	/*!< in: regex */
+	const char* regex)	/*!< in: regex */
 {
-  xb_regex_list_node_t*	node;
-  char			errbuf[100];
-  int			ret;
+	xb_regex_list_node_t*	node;
+	char			errbuf[100];
+	int			ret;
 
-  node = static_cast<xb_regex_list_node_t *>
-    (ut_malloc(sizeof(xb_regex_list_node_t)));
+	node = static_cast<xb_regex_list_node_t *>
+		(ut_malloc(sizeof(xb_regex_list_node_t)));
 
-  ret = regcomp(&node->regex, regex,REG_EXTENDED);
-  if (ret != 0) {
-    xb_regerror(ret, &node->regex, errbuf, sizeof(errbuf));
-    msg("xtrabackup: error: tables regcomp(%s): %s\n",
-      regex, errbuf);
-    exit(EXIT_FAILURE);
-  }
+	ret = regcomp(&node->regex, regex, REG_EXTENDED);
+	if (ret != 0) {
+		xb_regerror(ret, &node->regex, errbuf, sizeof(errbuf));
+		msg("xtrabackup: error: tables regcomp(%s): %s\n",
+			regex, errbuf);
+		exit(EXIT_FAILURE);
+	}
 
-  UT_LIST_ADD_LAST(regex_list, regex_list, node);
+	UT_LIST_ADD_LAST(regex_list, regex_list, node);
 }
 
 typedef void (*insert_entry_func_t)(const char*);
@@ -3895,14 +3914,12 @@ xtrabackup_backup_func(void)
 		exit(EXIT_FAILURE);
 	}
 
-	if (!xtrabackup_stream_str) {
-		/* create target dir if not exist */
-		if (!my_stat(xtrabackup_target_dir, &stat_info, MYF(0))
-		&& (my_mkdir(xtrabackup_target_dir, 0777, MYF(0)) < 0)) {
-			msg("xtrabackup: Error: cannot mkdir %d: %s\n",
-				my_errno, xtrabackup_target_dir);
-			exit(EXIT_FAILURE);
-		}
+	/* create target dir if not exist */
+	if (!xtrabackup_stream_str && !my_stat(xtrabackup_target_dir,&stat_info,MYF(0))
+		&& (my_mkdir(xtrabackup_target_dir,0777,MYF(0)) < 0)){
+		msg("xtrabackup: Error: cannot mkdir %d: %s\n",
+		    my_errno, xtrabackup_target_dir);
+		exit(EXIT_FAILURE);
 	}
 
         {
@@ -3947,10 +3964,10 @@ xtrabackup_backup_func(void)
 	mutex_exit(&log_sys->mutex);
 
 reread_log_header:
-	fil_io(OS_FILE_READ | OS_FILE_LOG, true,  max_cp_group->space_id,
-				0, 0, 0,
-        LOG_FILE_HDR_SIZE, log_hdr_buf,  max_cp_group,
-        NULL);
+	fil_io(OS_FILE_READ | OS_FILE_LOG, true, max_cp_group->space_id,
+				0,
+				0, 0, LOG_FILE_HDR_SIZE,
+				log_hdr_buf, max_cp_group, NULL);
 
 	/* check consistency of log file header to copy */
 	mutex_enter(&log_sys->mutex);
@@ -4032,6 +4049,7 @@ reread_log_header:
 
 	log_copying_stop = os_event_create();
 	os_thread_create(log_copying_thread, NULL, &log_copying_thread_id);
+
 	/* Populate fil_system with tablespaces to copy */
 	err = xb_load_tablespaces();
 	if (err != DB_SUCCESS) {
@@ -4797,9 +4815,10 @@ not_consistent:
 			max_lsn);
 	mach_write_to_4(log_buf + LOG_CHECKPOINT_1
 			+ LOG_CHECKPOINT_OFFSET_LOW32,
-			LOG_FILE_HDR_SIZE 
-      + (ulint)(max_lsn - ut_uint64_align_down(max_lsn,  OS_FILE_LOG_BLOCK_SIZE)));
-
+			LOG_FILE_HDR_SIZE +
+			(ulint)(max_lsn -
+			 ut_uint64_align_down(max_lsn,
+					      OS_FILE_LOG_BLOCK_SIZE)));
 	mach_write_to_4(log_buf + LOG_CHECKPOINT_1
 			+ LOG_CHECKPOINT_OFFSET_HIGH32, 0);
 	fold = ut_fold_binary(log_buf + LOG_CHECKPOINT_1, LOG_CHECKPOINT_CHECKSUM_1);
@@ -5702,7 +5721,7 @@ xb_export_cfg_write_index_fields(
 		}
 
 		/* Include the NUL byte in the length. */
-    ib_uint32_t	len = (ib_uint32_t)strlen(field->name) + 1;
+		ib_uint32_t	len = (ib_uint32_t)strlen(field->name) + 1;
 		ut_a(len > 1);
 
 		mach_write_to_4(row, len);
@@ -5792,7 +5811,7 @@ xb_export_cfg_write_indexes(
 
 		/* Write the length of the index name.
 		NUL byte is included in the length. */
-    ib_uint32_t	len = (ib_uint32_t)strlen(index->name) + 1;
+		ib_uint32_t	len = (ib_uint32_t)strlen(index->name) + 1;
 		ut_a(len > 1);
 
 		mach_write_to_4(row, len);
@@ -5866,7 +5885,7 @@ xb_export_cfg_write_table(
 		col_name = dict_table_get_col_name(table, dict_col_get_no(col));
 
 		/* Include the NUL byte in the length. */
-    len = (ib_uint32_t)strlen(col_name) + 1;
+		len = (ib_uint32_t)strlen(col_name) + 1;
 		ut_a(len > 1);
 
 		mach_write_to_4(row, len);
@@ -5910,7 +5929,7 @@ xb_export_cfg_write_header(
 	const char*		hostname = "Hostname unknown";
 
 	/* The server hostname includes the NUL byte. */
-  len = (ib_uint32_t)strlen(hostname) + 1;
+	len = (ib_uint32_t)strlen(hostname) + 1;
 	mach_write_to_4(value, len);
 
 	if (fwrite(&value, 1,  sizeof(value), file) != sizeof(value)
@@ -5923,7 +5942,7 @@ xb_export_cfg_write_header(
 
 	/* The table name includes the NUL byte. */
 	ut_a(table->name != 0);
-  len = (ib_uint32_t)strlen(table->name) + 1;
+	len = (ib_uint32_t)strlen(table->name) + 1;
 
 	/* Write the table name. */
 	mach_write_to_4(value, len);
@@ -6139,10 +6158,9 @@ xtrabackup_prepare_func(int argc, char ** argv)
 		    xtrabackup_real_target_dir);
 		exit(EXIT_FAILURE);
 	}
+	msg("xtrabackup: cd to %s\n", xtrabackup_real_target_dir);
 
-  msg("xtrabackup: cd to %s\n", xtrabackup_real_target_dir);
-
-  encryption_plugin_prepare_init(argc, argv);
+	encryption_plugin_prepare_init(argc, argv);
 
 	xtrabackup_target_dir= mysql_data_home_buff;
 	xtrabackup_target_dir[0]=FN_CURLIB;		// all paths are relative from here
@@ -6425,7 +6443,7 @@ skip_check:
 			       strlen(info_file_path) -
 			       4, ".exp");
 
-      len =(ib_uint32_t)strlen(info_file_path);
+			len =(ib_uint32_t)strlen(info_file_path);
 
 			p = info_file_path;
 			prev = NULL;
@@ -6824,25 +6842,24 @@ int main(int argc, char **argv)
 	}
 
 	system_charset_info= &my_charset_utf8_general_ci;
-  files_charset_info = &my_charset_utf8_general_ci;
-
-  dict_check_if_skip_table = check_if_skip_table;
+	files_charset_info = &my_charset_utf8_general_ci;
+	dict_check_if_skip_table = check_if_skip_table;
 
 	key_map_full.set_all();
 
-  setup_error_messages();
-  sys_var_init();
-  plugin_mutex_init();
-  mysql_rwlock_init(key_rwlock_LOCK_system_variables_hash, &LOCK_system_variables_hash);
-  opt_stack_trace = 1;
-  test_flags |=  TEST_SIGINT;
-  init_signals();
+	setup_error_messages();
+	sys_var_init();
+	plugin_mutex_init();
+	mysql_rwlock_init(key_rwlock_LOCK_system_variables_hash, &LOCK_system_variables_hash);
+	opt_stack_trace = 1;
+	test_flags |=  TEST_SIGINT;
+	init_signals();
 #ifndef _WIN32
-  /* Exit process on SIGINT. */
-  my_sigset(SIGINT, SIG_DFL);
+	/* Exit process on SIGINT. */
+	my_sigset(SIGINT, SIG_DFL);
 #endif
 
-  sf_leaking_memory = 0; /* don't report memory leaks on early exist */
+	sf_leaking_memory = 0; /* don't report memory leaks on early exist */
 
 	/* scan options for group and config file to load defaults from */
 	{
@@ -6857,11 +6874,14 @@ int main(int argc, char **argv)
 		if (argc > 1 && strcmp(argv[1], "--innobackupex") == 0)
 		{
 			my_progname= INNOBACKUPEX_BIN_NAME;
-			argv[0]= (char *)INNOBACKUPEX_BIN_NAME;
+			argv[0]= argv[1] =(char *)INNOBACKUPEX_BIN_NAME;
 			argv++;
 			argc--;
+			innobackupex_mode = true;
 		}
-		for (i=start; i < argc; i++) {
+
+		for (i=1; i < argc; i++) {
+
 			optend = strcend(argv[i], '=');
 
 			if (strncmp(argv[i], "--defaults-group",
@@ -6883,11 +6903,6 @@ int main(int argc, char **argv)
 			if (!strncmp(argv[i], "--apply-log",
 				     optend - argv[i])) {
 				prepare = true;
-			}
-
-			if (!strncmp(argv[i], "--innobackupex",
-				optend - argv[i])) {
-				innobackupex_mode = true;
 			}
 
 			if (!strncmp(argv[i], "--target-dir",
@@ -6943,7 +6958,6 @@ int main(int argc, char **argv)
 	if (innobackupex_mode && !ibx_handle_options(&argc, &argv)) {
 			exit(EXIT_FAILURE);
 	}
-
 
 	/* Throw a descriptive error if --defaults-file or --defaults-extra-file
 	is not the first command line argument */

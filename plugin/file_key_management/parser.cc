@@ -187,7 +187,6 @@ bool Parser::read_filekey(const char *filekey, char *secret)
 }
 
 
-
 /**
    Get the keys from the key file <filename> and decrypt it with the
    key <secret>.  Store the keys with id smaller then <maxKeyId> in an
@@ -354,7 +353,7 @@ char* Parser::read_and_decrypt_file(const char *secret)
 
   if (read(f, buffer, (int)file_size) != (int)file_size)
   {
-    my_printf_error(EE_READ, 
+    my_printf_error(EE_READ,
       "read from %s failed, errno %d",
       MYF(ME_NOREFRESH|ME_FATALERROR), filename, errno);
     goto err2;

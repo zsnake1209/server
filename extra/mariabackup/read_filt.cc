@@ -126,7 +126,7 @@ rf_bitmap_get_next_batch(
 							bytes of the next batch
 							of pages */
 {
-	ulint 	start_page_id;
+	ulint	start_page_id;
 
 	start_page_id = (ulint)(ctxt->offset / ctxt->page_size);
 

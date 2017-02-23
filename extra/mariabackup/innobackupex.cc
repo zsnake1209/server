@@ -138,6 +138,8 @@ my_bool	ibx_xtrabackup_incremental_force_scan;
 ulint ibx_xtrabackup_log_copy_interval;
 char *ibx_xtrabackup_incremental;
 int ibx_xtrabackup_parallel;
+my_bool ibx_xtrabackup_rebuild_indexes;
+ulint ibx_xtrabackup_rebuild_threads;
 char *ibx_xtrabackup_stream_str;
 char *ibx_xtrabackup_tables_file;
 long ibx_xtrabackup_throttle;
@@ -148,23 +150,24 @@ longlong ibx_xtrabackup_use_memory;
 static inline int ibx_msg(const char *fmt, ...) ATTRIBUTE_FORMAT(printf, 1, 2);
 static inline int ibx_msg(const char *fmt, ...)
 {
-  int	result;
-  time_t	t = time(NULL);
-  char	date[100];
-  char	line[1024];
+	int	result;
+	time_t	t = time(NULL);
+	char	date[100];
+	char	*line;
 	va_list args;
 
 	strftime(date, sizeof(date), "%y%m%d %H:%M:%S", localtime(&t));
 
 	va_start(args, fmt);
 
-	result = vsnprintf(line, sizeof(line), fmt, args);
+	result = vasprintf(&line, fmt, args);
 
 	va_end(args);
 
 	if (result != -1) {
 		result = fprintf(stderr, "%s %s: %s",
 					date, INNOBACKUPEX_BIN_NAME, line);
+		free(line);
 	}
 
 	return result;
@@ -224,6 +227,8 @@ enum innobackupex_options
 	OPT_INCREMENTAL_FORCE_SCAN,
 	OPT_LOG_COPY_INTERVAL,
 	OPT_PARALLEL,
+	OPT_REBUILD_INDEXES,
+	OPT_REBUILD_THREADS,
 	OPT_STREAM,
 	OPT_TABLES_FILE,
 	OPT_THROTTLE,
@@ -886,12 +891,11 @@ make_backup_dir()
 {
 	time_t t = time(NULL);
 	char buf[100];
-  
+
 	if (!opt_ibx_notimestamp && !ibx_xtrabackup_stream_str) {
 		strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", localtime(&t));
-    ibx_backup_directory= (char *)malloc(strlen(ibx_position_arg) + strlen(buf) + 2);
-    ut_a(ibx_backup_directory);
-    sprintf(ibx_backup_directory, "%s/%s", ibx_position_arg, buf);
+		ut_a(asprintf(&ibx_backup_directory, "%s/%s",
+				ibx_position_arg, buf) != -1);
 	} else {
 		ibx_backup_directory = strdup(ibx_position_arg);
 	}

@@ -1,6 +1,7 @@
 /******************************************************
 hot backup tool for InnoDB
 (c) 2009-2015 Percona LLC and/or its affiliates
+(c) 2017 MariaDB
 Originally Created 3/3/2009 Yasufumi Kinoshita
 Written by Alexey Kopytov, Aleksandr Kuzminsky, Stewart Smith, Vadim Tkachenko,
 Yasufumi Kinoshita, Ignacio Nin and Baron Schwartz.
@@ -225,8 +226,7 @@ datadir_iter_next_database(datadir_iter_t *it)
 		it->dbdir = NULL;
 	}
 
-
-  while (os_file_readdir_next_file(it->datadir_path,
+	while (os_file_readdir_next_file(it->datadir_path,
 					  it->dir, &it->dbinfo) == 0) {
 		ulint	len;
 
@@ -450,9 +450,9 @@ struct datafile_cur_t {
 	uint		thread_n;
 	byte*		orig_buf;
 	byte*		buf;
-	size_t	buf_size;
-	size_t	buf_read;
-	size_t	buf_offset;
+	size_t		buf_size;
+	size_t		buf_read;
+	size_t		buf_offset;
 };
 
 static
@@ -499,7 +499,6 @@ datafile_open(const char *file, datafile_cur_t *cursor, uint thread_n)
 		return(false);
 	}
 
-
 	if (!my_stat(cursor->abs_path, &cursor->statinfo, 0)) {
 		msg("[%02u] error: cannot stat %s\n",
 			thread_n, cursor->abs_path);
@@ -529,7 +528,6 @@ datafile_read(datafile_cur_t *cursor)
 
 	to_read = (ulint)MY_MIN(cursor->statinfo.st_size - cursor->buf_offset, 
 		      cursor->buf_size);
-  
 
 	if (to_read == 0) {
 		return(XB_FIL_CUR_EOF);
@@ -665,7 +663,7 @@ equal_paths(const char *first, const char *second)
 
 	return (strcmp(real_first, real_second) == 0);
 #else
-  return strcmp(first, second) == 0;
+	return strcmp(first, second) == 0;
 #endif
 }
 
@@ -687,7 +685,7 @@ directory_exists(const char *dir, bool create)
 		}
 
 		if (mkdirp(dir, 0777, MYF(0)) < 0) {
-      my_strerror(errbuf, sizeof(errbuf), my_errno);
+			my_strerror(errbuf, sizeof(errbuf), my_errno);
 			msg("Can not create directory %s: %s\n", dir, errbuf);
 			return(false);
 
@@ -698,7 +696,7 @@ directory_exists(const char *dir, bool create)
 	os_dir = os_file_opendir(dir, FALSE);
 
 	if (os_dir == NULL) {
-    my_strerror(errbuf, sizeof(errbuf), my_errno);
+		my_strerror(errbuf, sizeof(errbuf), my_errno);
 		msg("Can not open directory %s: %s\n", dir,
 			errbuf);
 
@@ -1064,14 +1062,14 @@ move_file(ds_ctxt_t *datasink,
 					dst_file_path, thread_n);
 			msg_ts("[%02u] Removing %s\n", thread_n, src_file_path);
 			if (unlink(src_file_path) != 0) {
-        my_strerror(errbuf, sizeof(errbuf), errno);
+				my_strerror(errbuf, sizeof(errbuf), errno);
 				msg("Error: unlink %s failed: %s\n",
 					src_file_path,
 					errbuf);
 			}
 			return(ret);
 		}
-    my_strerror(errbuf, sizeof(errbuf), my_errno);
+		my_strerror(errbuf, sizeof(errbuf), my_errno);
 		msg("Can not move file %s to %s: %s\n",
 			src_file_path, dst_file_path_abs,
 			errbuf);
@@ -1542,7 +1540,7 @@ ibx_cleanup_full_backup()
 
 		if (node.is_empty_dir) {
 #ifdef _WIN32
-      DeleteFile(node.filepath);
+			DeleteFile(node.filepath);
 #else
 			rmdir(node.filepath);
 #endif
@@ -1734,7 +1732,7 @@ copy_back()
 
 			if (mkdirp(path, 0777, MYF(0)) < 0) {
 				char errbuf[MYSYS_STRERROR_SIZE];
-        my_strerror(errbuf, sizeof(errbuf), my_errno);
+				my_strerror(errbuf, sizeof(errbuf), my_errno);
 				msg("Can not create directory %s: %s\n",
 					path, errbuf);
 				ret = false;
@@ -1887,7 +1885,7 @@ decrypt_decompress_file(const char *filepath, uint thread_n)
 }
 
 static
-os_thread_ret_t  STDCALL
+os_thread_ret_t STDCALL
 decrypt_decompress_thread_func(void *arg)
 {
 	bool ret = true;

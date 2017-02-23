@@ -124,10 +124,6 @@ xb_fil_node_close_file(
 	mutex_exit(&fil_system->mutex);
 }
 
-#ifdef _WIN32
-extern "C" int my_open_osfhandle(HANDLE, int);
-#endif
-
 /************************************************************************
 Open a source file cursor and initialize the associated read filter.
 
@@ -213,7 +209,6 @@ xb_fil_cur_open(
 
 		return(XB_FIL_CUR_ERROR);
 	}
-
 
 	if (srv_unix_file_flush_method == SRV_UNIX_O_DIRECT
 	    || srv_unix_file_flush_method == SRV_UNIX_O_DIRECT_NO_FSYNC) {
@@ -358,7 +353,7 @@ read_retry:
 
 			if (cursor->is_system &&
 			    page_no >= (ib_int64_t)FSP_EXTENT_SIZE &&
-				page_no < (ib_int64_t) FSP_EXTENT_SIZE * 3) {
+			    page_no < (ib_int64_t) FSP_EXTENT_SIZE * 3) {
 				/* skip doublewrite buffer pages */
 				xb_a(cursor->page_size == UNIV_PAGE_SIZE);
 				msg("[%02u] xtrabackup: "
