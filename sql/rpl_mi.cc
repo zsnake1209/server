@@ -1380,7 +1380,7 @@ bool give_error_if_slave_running(bool already_locked)
 
   if (!already_locked)
     mysql_mutex_lock(&LOCK_active_mi);
-  if (!master_info_index)
+  if (shutdown_in_progress)
   {
     my_error(ER_SERVER_SHUTDOWN, MYF(0));
     ret= 1;
@@ -1413,23 +1413,31 @@ bool give_error_if_slave_running(bool already_locked)
    @return
    0            No Slave SQL thread is running
    #		Number of slave SQL thread running
+
+   Note that during shutdown we return 1. This is needed to ensure we
+   don't try to resize thread pool during shutdown as during shutdown
+   master_info_hash may be freeing the hash and during that time
+   hash entries can't be accessed.
 */
 
 uint any_slave_sql_running()
 {
   uint count= 0;
+  HASH *hash;
   DBUG_ENTER("any_slave_sql_running");
 
   mysql_mutex_lock(&LOCK_active_mi);
-  if (likely(master_info_index))                // Not shutdown
+  if (unlikely(shutdown_in_progress || !master_info_index))
   {
-    HASH *hash= &master_info_index->master_info_hash;
-    for (uint i= 0; i< hash->records; ++i)
-    {
-      Master_info *mi= (Master_info *)my_hash_element(hash, i);
-      if (mi->rli.slave_running != MYSQL_SLAVE_NOT_RUN)
-        count++;
-    }
+    mysql_mutex_unlock(&LOCK_active_mi);
+    DBUG_RETURN(1);
+  }
+  hash= &master_info_index->master_info_hash;
+  for (uint i= 0; i< hash->records; ++i)
+  {
+    Master_info *mi= (Master_info *)my_hash_element(hash, i);
+    if (mi->rli.slave_running != MYSQL_SLAVE_NOT_RUN)
+      count++;
   }
   mysql_mutex_unlock(&LOCK_active_mi);
   DBUG_RETURN(count);
