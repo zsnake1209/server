@@ -3780,7 +3780,7 @@ xtrabackup_backup_func(void)
 	srv_read_only_mode = TRUE;
 
 	srv_backup_mode = TRUE;
-	srv_close_files = xb_close_files;
+	srv_close_files = (bool)xb_close_files;
 
 	if (srv_close_files)
 		msg("xtrabackup: warning: close-files specified. Use it "
@@ -6292,7 +6292,7 @@ skip_check:
 		goto error_cleanup;
 	}
 
-	srv_apply_log_only = (ibool) xtrabackup_apply_log_only;
+	srv_apply_log_only = (bool) xtrabackup_apply_log_only;
 
 	/* increase IO threads */
 	if(srv_n_file_io_threads < 10) {
@@ -6302,7 +6302,7 @@ skip_check:
 
 	if (innobase_log_arch_dir) {
 		srv_arch_dir = innobase_log_arch_dir;
-		srv_archive_recovery = TRUE;
+		srv_archive_recovery = true;
 		if (xtrabackup_archived_to_lsn) {
 			if (xtrabackup_archived_to_lsn < metadata_last_lsn) {
 				msg("xtrabackup: warning: logs applying lsn "
@@ -6328,7 +6328,7 @@ skip_check:
 		  Unfinished transactions are not rolled back during log applying
 		  as they can be finished at the firther files applyings.
 		*/
-		srv_apply_log_only = xtrabackup_apply_log_only = TRUE;
+		srv_apply_log_only = xtrabackup_apply_log_only = true;
 
 		if (!xtrabackup_arch_search_files(min_flushed_lsn)) {
 			goto error_cleanup;
@@ -6663,7 +6663,7 @@ next_node:
 			goto error;
 		}
 
-		srv_apply_log_only = FALSE;
+		srv_apply_log_only = false;
 
 		/* increase IO threads */
 		if(srv_n_file_io_threads < 10) {
@@ -6827,7 +6827,7 @@ handle_options(int argc, char **argv, char ***argv_client, char ***argv_server)
 {
 	/* Setup some variables for Innodb.*/
 
-	srv_xtrabackup = TRUE;
+	srv_xtrabackup = true;
 
 
 	files_charset_info = &my_charset_utf8_general_ci;

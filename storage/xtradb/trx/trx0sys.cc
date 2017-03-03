@@ -1340,7 +1340,7 @@ trx_sys_close(void)
 	ut_a(UT_LIST_GET_LEN(trx_sys->rw_trx_list) == trx_sys->n_prepared_trx
 	     || srv_read_only_mode
 	     || srv_force_recovery >= SRV_FORCE_NO_TRX_UNDO
-	     || IS_XTRABACKUP());
+	     || (IS_XTRABACKUP() && srv_apply_log_only));
 
 
 	while ((trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list)) != NULL) {

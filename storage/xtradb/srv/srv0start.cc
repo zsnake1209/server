@@ -1082,7 +1082,7 @@ skip_size_check:
 				/* XtraBackup never loads corrupted pages from
 				the doublewrite buffer */
 				buf_dblwr_init_or_load_pages(
-					files[i], srv_data_file_names[i], IS_XTRABACKUP()?false: true);
+					files[i], srv_data_file_names[i], !IS_XTRABACKUP());
 			}
 
 			bool retry = true;
@@ -2320,11 +2320,6 @@ innobase_start_or_create_for_mysql(void)
 					max_flushed_lsn = min_flushed_lsn
 						= log_get_lsn();
 					goto files_checked;
-				} else if (i < 2 && !IS_XTRABACKUP()) {
-					/* must have at least 2 log files */
-					ib_logf(IB_LOG_LEVEL_ERROR,
-						"Only one log file found.");
-					return(err);
 				}
 
 				/* opened all files */
@@ -2884,9 +2879,6 @@ files_checked:
 		thread_started[4 + SRV_MAX_N_IO_THREADS] = true;
 	}
 
-	if (!IS_XTRABACKUP()) {
-	/* Do not re-create system tables in XtraBackup */
-
 	/* Create the SYS_FOREIGN and SYS_FOREIGN_COLS system tables */
 	err = dict_create_or_check_foreign_constraint_tables();
 	if (err != DB_SUCCESS) {
@@ -2901,8 +2893,6 @@ files_checked:
 			return(err);
 		}
 	}
-
-	} /* !IS_XTRABACKUP() */
 
 	srv_is_being_started = FALSE;
 
@@ -3320,6 +3310,7 @@ innobase_shutdown_for_mysql(void)
 
 	srv_was_started = FALSE;
 	srv_start_has_been_called = FALSE;
+	/* reset io_tid_i, in case current process does second innodb start (xtrabackup might do that).*/
 	io_tid_i = 0;
 	return(DB_SUCCESS);
 }

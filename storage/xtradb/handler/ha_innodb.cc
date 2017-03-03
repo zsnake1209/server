@@ -284,6 +284,7 @@ static TYPELIB innodb_stats_method_typelib = {
 
 /** Possible values for system variables "innodb_checksum_algorithm" and
 "innodb_log_checksum_algorithm". */
+UNIV_INTERN
 const char* innodb_checksum_algorithm_names[] = {
 	"CRC32",
 	"STRICT_CRC32",
@@ -296,6 +297,7 @@ const char* innodb_checksum_algorithm_names[] = {
 
 /** Used to define an enumerate type of the system variables
 innodb_checksum_algorithm and innodb_log_checksum_algorithm. */
+UNIV_INTERN
 TYPELIB innodb_checksum_algorithm_typelib = {
 	array_elements(innodb_checksum_algorithm_names) - 1,
 	"innodb_checksum_algorithm_typelib",
@@ -2000,7 +2002,9 @@ thd_supports_xa(
 	THD*	thd)	/*!< in: thread handle, or NULL to query
 			the global innodb_supports_xa */
 {
-	return(THDVAR(thd, support_xa));
+	/* THDVAR cannot be used in xtrabackup,
+	plugin variables  for innodb are not loaded. */
+	return (thd || !IS_XTRABACKUP())? THDVAR(thd, support_xa): FALSE;
 }
 
 /** Get the value of innodb_tmpdir.
@@ -2033,7 +2037,9 @@ thd_fake_changes(
 	THD*	thd)	/*!< in: thread handle, or NULL to query
 			the global innodb_supports_xa */
 {
-	return(THDVAR((THD*) thd, fake_changes));
+	/* THDVAR cannot be used in xtrabackup,
+	plugin variables  for innodb are not loaded */
+	return (thd || !IS_XTRABACKUP())? THDVAR((THD*) thd, fake_changes) : FALSE ;
 }
 
 /******************************************************************//**
@@ -2073,7 +2079,10 @@ thd_flush_log_at_trx_commit(
 /*================================*/
 	void*	thd)
 {
-	return(IS_XTRABACKUP() ? 0 : THDVAR((THD*)thd, flush_log_at_trx_commit));
+	/* THDVAR cannot be used in xtrabackup,
+	plugin variables  for innodb are not loaded,
+	this makes xtrabackup crash when trying to use them. */
+	return (thd || !IS_XTRABACKUP())? THDVAR((THD*)thd, flush_log_at_trx_commit) : FALSE;
 }
 
 /********************************************************************//**

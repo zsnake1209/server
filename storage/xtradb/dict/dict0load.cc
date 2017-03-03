@@ -807,18 +807,6 @@ dict_get_first_path(
 	mtr_start(&mtr);
 
 	sys_datafiles = dict_table_get_low("SYS_DATAFILES");
-
-	/* SYS_DATAFILES does not necessarily exist on XtraBackup recovery. See
-	comments around dict_create_or_check_foreign_constraint_tables() in
-	innobase_start_or_create_for_mysql(). */
-	if (IS_XTRABACKUP() && !sys_datafiles) {
-
-		mtr_commit(&mtr);
-		mem_heap_free(heap);
-
-		return(NULL);
-	}
-
 	sys_index = UT_LIST_GET_FIRST(sys_datafiles->indexes);
 	ut_ad(!dict_table_is_comp(sys_datafiles));
 	ut_ad(name_of_col_is(sys_datafiles, sys_index,
@@ -1119,10 +1107,9 @@ loop:
 			print_error_if_does_not_exist = true;
 		}
 
-		remove_from_data_dict_if_does_not_exist = IS_XTRABACKUP() && (!(is_temp || discarded));
+		remove_from_data_dict_if_does_not_exist = IS_XTRABACKUP() && !(is_temp || discarded);
 
 		mtr_commit(&mtr);
-
 
 		switch (dict_check) {
 		case DICT_CHECK_ALL_LOADED:

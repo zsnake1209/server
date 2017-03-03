@@ -372,8 +372,8 @@ readahead request. */
 UNIV_INTERN ulong	srv_read_ahead_threshold	= 56;
 
 #ifdef UNIV_LOG_ARCHIVE
-UNIV_INTERN ibool		srv_log_archive_on	= FALSE;
-UNIV_INTERN ibool		srv_archive_recovery	= 0;
+UNIV_INTERN bool		srv_log_archive_on;
+UNIV_INTERN bool		srv_archive_recovery;
 UNIV_INTERN ib_uint64_t	srv_archive_recovery_limit_lsn;
 #endif /* UNIV_LOG_ARCHIVE */
 
@@ -529,11 +529,11 @@ UNIV_INTERN ulong	srv_doublewrite_batch_size	= 120;
 
 UNIV_INTERN ulong	srv_replication_delay		= 0;
 
-UNIV_INTERN ibool	srv_apply_log_only	= FALSE;
+UNIV_INTERN bool	srv_apply_log_only;
 
-UNIV_INTERN ibool	srv_backup_mode	= FALSE;
-UNIV_INTERN ibool	srv_close_files = TRUE;
-UNIV_INTERN ibool	srv_xtrabackup = FALSE;
+UNIV_INTERN bool	srv_backup_mode;
+UNIV_INTERN bool	srv_close_files;
+UNIV_INTERN bool	srv_xtrabackup;
 
 UNIV_INTERN ulong	srv_pass_corrupt_table = 0; /* 0:disable 1:enable */
 

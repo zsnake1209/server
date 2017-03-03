@@ -496,8 +496,8 @@ as enum type because the configure option takes unsigned integer type. */
 extern ulong	srv_innodb_stats_method;
 
 #ifdef UNIV_LOG_ARCHIVE
-extern ibool		srv_log_archive_on;
-extern ibool		srv_archive_recovery;
+extern bool		srv_log_archive_on;
+extern bool		srv_archive_recovery;
 extern ib_uint64_t	srv_archive_recovery_limit_lsn;
 #endif /* UNIV_LOG_ARCHIVE */
 
@@ -548,11 +548,11 @@ extern ulong	srv_pass_corrupt_table;
 
 extern ulong	srv_log_checksum_algorithm;
 
-extern ibool	srv_apply_log_only;
+extern bool	srv_apply_log_only;
 
-extern ibool	srv_backup_mode;
-extern ibool	srv_close_files;
-extern ibool	srv_xtrabackup;
+extern bool	srv_backup_mode;
+extern bool	srv_close_files;
+extern bool	srv_xtrabackup;
 
 #define IS_XTRABACKUP() (srv_xtrabackup)
 

@@ -2395,8 +2395,8 @@ fil_read_first_page(
 		*/
 		os_offset_t	file_size;
 		file_size = os_file_get_size(data_file);
-		if (file_size < UNIV_PAGE_SIZE) {
-			return "File is smaller than UNIV_PAGE_SIZE";
+		if (file_size < FIL_IBD_FILE_INITIAL_SIZE*UNIV_PAGE_SIZE) {
+			return "File size is less than minimum";
 		}
 	}
 
@@ -5201,18 +5201,12 @@ will_not_choose:
 	cannot be ok. */
 	minimum_size = FIL_IBD_FILE_INITIAL_SIZE * UNIV_PAGE_SIZE;
 	if (size < minimum_size) {
-		if (!IS_XTRABACKUP())  {
-			ib_logf(IB_LOG_LEVEL_ERROR,
-				"The size of single-table tablespace file %s "
-				"is only " UINT64PF ", should be at least %lu!",
-				fsp->filepath, size, minimum_size);
-			os_file_close(fsp->file);
-			goto no_good_file;
-		}
-		else {
-			fsp->id = ULINT_UNDEFINED;
-			fsp->flags = 0;
-		}
+		ib_logf(IB_LOG_LEVEL_ERROR,
+			"The size of single-table tablespace file %s "
+			"is only " UINT64PF ", should be at least %lu!",
+			fsp->filepath, size, minimum_size);
+		os_file_close(fsp->file);
+		goto no_good_file;
 	}
 
 #ifdef UNIV_HOTBACKUP
@@ -5385,7 +5379,7 @@ directory. We retry 100 times if os_file_readdir_next_file() returns -1. The
 idea is to read as much good data as we can and jump over bad data.
 @return 0 if ok, -1 if error even after the retries, 1 if at the end
 of the directory */
-
+UNIV_INTERN
 int
 fil_file_readdir_next_file(
 /*=======================*/
@@ -5743,7 +5737,7 @@ fil_space_for_table_exists_in_mem(
 		if (fnamespace == NULL) {
 			if (print_error_if_does_not_exist) {
 				fil_report_missing_tablespace(name, id);
-				if (IS_XTRABACKUP()) {
+				if (IS_XTRABACKUP() && remove_from_data_dict_if_does_not_exist) {
 					ib_logf(IB_LOG_LEVEL_WARN,
 						"It will be removed from "
 						"the data dictionary.");
@@ -6362,16 +6356,6 @@ _fil_io(
 
 	ut_ad(mode != OS_AIO_IBUF || space->purpose == FIL_TABLESPACE);
 
-	if (IS_XTRABACKUP() && space->size > 0 && space->size <= block_offset) {
-		ulint	actual_size;
-
-		mutex_exit(&fil_system->mutex);
-		fil_extend_space_to_desired_size(&actual_size, space->id,
-			block_offset + 1);
-		mutex_enter(&fil_system->mutex);
-		/* should retry? but it may safe for xtrabackup for now. */
-	}
-
 	node = fil_space_get_node(space, space_id, &block_offset, byte_offset, len);
 
 	if (!node) {
@@ -6412,8 +6396,8 @@ _fil_io(
 
 	/* Check that at least the start offset is within the bounds of a
 	single-table tablespace, including rollback tablespaces. */
-	if (!IS_XTRABACKUP() && UNIV_UNLIKELY(node->size <= block_offset)
-			&& space->id != 0 && space->purpose == FIL_TABLESPACE) {
+	if (UNIV_UNLIKELY(node->size <= block_offset)
+		&& space->id != 0 && space->purpose == FIL_TABLESPACE) {
 
 		fil_report_invalid_page_access(
 			block_offset, space_id, space->name, byte_offset,
@@ -6431,9 +6415,9 @@ _fil_io(
 		offset = ((os_offset_t) block_offset << UNIV_PAGE_SIZE_SHIFT)
 			+ byte_offset;
 
-		ut_a(IS_XTRABACKUP() || (node->size - block_offset
+		ut_a(node->size - block_offset
 		     >= ((byte_offset + len + (UNIV_PAGE_SIZE - 1))
-			 / UNIV_PAGE_SIZE)));
+			 / UNIV_PAGE_SIZE));
 	} else {
 		ulint	zip_size_shift;
 		switch (zip_size) {
@@ -6448,8 +6432,8 @@ _fil_io(
 		}
 		offset = ((os_offset_t) block_offset << zip_size_shift)
 			+ byte_offset;
-		ut_a(IS_XTRABACKUP() || (node->size - block_offset
-		     >= (len + (zip_size - 1)) / zip_size));
+		ut_a(node->size - block_offset
+		     >= (len + (zip_size - 1)) / zip_size);
 	}
 
 	/* Do aio */
@@ -7743,6 +7727,7 @@ fil_space_get_crypt_data(
 
 		crypt_data = space->crypt_data;
 
+		/*TODO : MDEV-11738 */
 		if (!space->page_0_crypt_read && !IS_XTRABACKUP()) {
 			ib_logf(IB_LOG_LEVEL_WARN,
 				"Space %lu name %s contains encryption %d information for key_id %u but page0 is not read.",
