@@ -40,3 +40,6 @@
 #define VERSION_thd_timezone            0x0100
 #define VERSION_thd_wait                0x0100
 #define VERSION_wsrep                   0x0201
+#define VERSION_my_print_error          0x0100
+#define VERSION_my_crypt                0x0100
+#define VERSION_error_log               0x0100

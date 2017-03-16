@@ -27,11 +27,12 @@ INCLUDE(${MYSQL_CMAKE_SCRIPT_DIR}/cmake_parse_arguments.cmake)
 # [RECOMPILE_FOR_EMBEDDED]
 # [LINK_LIBRARIES lib1...libN]
 # [DEPENDENCIES target1...targetN]
+# [ENCRYPTION]
 
 MACRO(MYSQL_ADD_PLUGIN)
   MYSQL_PARSE_ARGUMENTS(ARG
     "LINK_LIBRARIES;DEPENDENCIES;MODULE_OUTPUT_NAME;STATIC_OUTPUT_NAME;COMPONENT;CONFIG"
-    "STORAGE_ENGINE;STATIC_ONLY;MODULE_ONLY;MANDATORY;DEFAULT;DISABLED;RECOMPILE_FOR_EMBEDDED;CLIENT"
+    "STORAGE_ENGINE;STATIC_ONLY;MODULE_ONLY;MANDATORY;DEFAULT;DISABLED;RECOMPILE_FOR_EMBEDDED;CLIENT;ENCRYPTION"
     ${ARGN}
   )
   IF(NOT WITHOUT_SERVER OR ARG_CLIENT)
@@ -121,7 +122,13 @@ MACRO(MYSQL_ADD_PLUGIN)
       SET(ARG_MODULE_OUTPUT_NAME "${target}")
     ENDIF()
   ENDIF()
-
+  IF(NOT MSVC)
+    # We have special handling for encryption plugins,
+    # on windows (they need to be loaded into xtrabackup.exe
+    # and mysqld.exe, which requires subverting a loader somewhat
+    # On non-windows we don't do anything.
+    SET(ARG_ENCRYPTION OFF)
+  ENDIF()
   # Build either static library or module
   IF (PLUGIN_${plugin} MATCHES "(STATIC|AUTO|YES)" AND NOT ARG_MODULE_ONLY
       AND NOT ARG_CLIENT)
@@ -183,6 +190,7 @@ MACRO(MYSQL_ADD_PLUGIN)
          AND NOT ARG_STATIC_ONLY AND NOT WITHOUT_DYNAMIC_PLUGINS)
 
     ADD_VERSION_INFO(${target} MODULE SOURCES)
+
     ADD_LIBRARY(${target} MODULE ${SOURCES}) 
     DTRACE_INSTRUMENT(${target})
 
@@ -201,7 +209,7 @@ MACRO(MYSQL_ADD_PLUGIN)
     # executable to the linker command line (it would result into link error). 
     # Thus we skip TARGET_LINK_LIBRARIES on Linux, as it would only generate
     # an additional dependency.
-    IF(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARG_CLIENT)
+    IF(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARG_CLIENT AND NOT ARG_ENCRYPTION)
       TARGET_LINK_LIBRARIES (${target} mysqld)
     ENDIF()
     ADD_DEPENDENCIES(${target} GenError ${ARG_DEPENDENCIES})

@@ -35,7 +35,11 @@ SET(MYSQLSERVICES_SOURCES
   thd_timezone_service.c
   thd_wait_service.c
   wsrep_service.c
-)
+  logger_service.c
+  my_crypt_service.c
+  my_print_error_service.c
+  error_log_service.c
+  )
 
 ADD_CONVENIENCE_LIBRARY(mysqlservices ${MYSQLSERVICES_SOURCES})
 INSTALL(TARGETS mysqlservices DESTINATION ${INSTALL_LIBDIR} COMPONENT Development)

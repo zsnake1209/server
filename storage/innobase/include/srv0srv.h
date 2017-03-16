@@ -427,8 +427,8 @@ as enum type because the configure option takes unsigned integer type. */
 extern ulong	srv_innodb_stats_method;
 
 #ifdef UNIV_LOG_ARCHIVE
-extern ibool		srv_log_archive_on;
-extern ibool		srv_archive_recovery;
+extern bool		srv_log_archive_on;
+extern bool		srv_archive_recovery;
 extern ib_uint64_t	srv_archive_recovery_limit_lsn;
 #endif /* UNIV_LOG_ARCHIVE */
 
