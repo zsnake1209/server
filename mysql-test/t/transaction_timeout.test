@@ -3,6 +3,7 @@
 --source include/have_innodb.inc
 --source include/not_embedded.inc
 
+connect (c0,localhost,root,,test,,);
 SET autocommit=0;
 CREATE TABLE t1 (a INT) ENGINE=InnoDB;
 
@@ -19,9 +20,11 @@ BEGIN;
 INSERT INTO t1 VALUES (4),(5),(6);
 sleep 2;
 
---enable_reconnect
 --error 2006,2013
 SELECT * FROM t1;
+disconnect c0;
+
+connect (c1,localhost,root,,test,,);
 SELECT * FROM t1;
 DROP TABLE t1;
 SET idle_transaction_timeout=0;
@@ -43,9 +46,11 @@ SELECT * FROM t1;
 
 sleep 2;
 
---enable_reconnect
---error 2006,2013
+--error 2006,2013 # Gone away
 SELECT * FROM t1;
+disconnect c1;
+
+connect (c2,localhost,root,,test,,);
 SELECT * FROM t1;
 DROP TABLE t1;
 SET idle_readonly_transaction_timeout=0;
@@ -70,9 +75,11 @@ sleep 2;
 SELECT * FROM t1;
 INSERT INTO t1 VALUES (4),(5),(6);
 sleep 2;
---enable_reconnect
---error 2006,2013
+--error 2006, 2013 # Gone away
 SELECT * FROM t1;
+disconnect c2;
+
+connection default;
 DROP TABLE t1;
 SET idle_readwrite_transaction_timeout=0;
 SHOW VARIABLES LIKE 'idle_%transaction_timeout';
