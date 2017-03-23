@@ -12898,6 +12898,10 @@ index_bad:
 		        default_compression_level : static_cast<ulint>(options->page_compression_level),
 		    	0);
 
+	if (m_form->s->table_type == TABLE_TYPE_SEQUENCE) {
+		m_flags |= 1U << DICT_TF_POS_NO_ROLLBACK;
+	}
+
 	/* Set the flags2 when create table or alter tables */
 	m_flags2 |= DICT_TF2_FTS_AUX_HEX_NAME;
 	DBUG_EXECUTE_IF("innodb_test_wrong_fts_aux_table_name",
@@ -13527,6 +13531,10 @@ ha_innobase::create(
 	char		remote_path[FN_REFLEN];	/* Absolute path of table */
 	trx_t*		trx;
 	DBUG_ENTER("ha_innobase::create");
+
+	DBUG_ASSERT(form->s == table_share);
+	DBUG_ASSERT(table_share->table_type == TABLE_TYPE_SEQUENCE
+		    || table_share->table_type == TABLE_TYPE_NORMAL);
 
 	create_table_info_t	info(ha_thd(),
 				     form,

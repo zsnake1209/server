@@ -3169,7 +3169,7 @@ row_ins_clust_index_entry(
 	log_free_check();
 	const ulint	flags = dict_table_is_temporary(index->table)
 		? BTR_NO_LOCKING_FLAG
-		: 0;
+		: index->table->no_rollback() ? BTR_NO_ROLLBACK : 0;
 
 	err = row_ins_clust_index_entry_low(
 		flags, BTR_MODIFY_LEAF, index, n_uniq, entry,
