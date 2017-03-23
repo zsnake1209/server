@@ -100,6 +100,8 @@ enum enum_sql_command {
   SQLCOM_DROP_PACKAGE,
   SQLCOM_CREATE_PACKAGE_BODY,
   SQLCOM_DROP_PACKAGE_BODY,
+  SQLCOM_CREATE_SEQUENCE,
+  SQLCOM_DROP_SEQUENCE,
 
   /*
     When a command is added here, be sure it's also added in mysqld.cc

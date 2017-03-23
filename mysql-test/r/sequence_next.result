@@ -1,0 +1,175 @@
+CREATE SEQUENCE t1 start with 1 minvalue 1 maxvalue 10 increment by 1 cache 2 cycle;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `next_value` bigint(21) NOT NULL COMMENT 'next not cached value',
+  `min_value` bigint(21) NOT NULL COMMENT 'min value',
+  `max_value` bigint(21) NOT NULL COMMENT 'max value',
+  `start` bigint(21) NOT NULL COMMENT 'start value',
+  `increment` bigint(21) NOT NULL COMMENT 'increment value',
+  `cache` bigint(21) NOT NULL COMMENT 'cache size',
+  `cycle` tinyint(1) unsigned NOT NULL COMMENT 'cycle state',
+  `round` bigint(21) NOT NULL COMMENT 'How many cycles has been done'
+) ENGINE=MyISAM SEQUENCE=1
+select next value for t1;
+next value for t1
+1
+select next_value,round from t1;
+next_value	round
+3	0
+select next value for t1;
+next value for t1
+2
+select next_value,round from t1;
+next_value	round
+3	0
+select next value for t1;
+next value for t1
+3
+select next_value,round from t1;
+next_value	round
+5	0
+select next value for t1;
+next value for t1
+4
+select next_value,round from t1;
+next_value	round
+5	0
+select next value for t1;
+next value for t1
+5
+select next_value,round from t1;
+next_value	round
+7	0
+select next value for t1;
+next value for t1
+6
+select next_value,round from t1;
+next_value	round
+7	0
+select next value for t1;
+next value for t1
+7
+select next_value,round from t1;
+next_value	round
+9	0
+select next value for t1;
+next value for t1
+8
+select next_value,round from t1;
+next_value	round
+9	0
+select next value for t1;
+next value for t1
+9
+select next_value,round from t1;
+next_value	round
+11	0
+select next value for t1;
+next value for t1
+10
+select next_value,round from t1;
+next_value	round
+11	0
+select next value for t1;
+next value for t1
+1
+select next_value,round from t1;
+next_value	round
+3	1
+drop sequence t1;
+CREATE SEQUENCE t1 minvalue 1 maxvalue 10 increment by -1 cache 2 cycle engine=aria;
+select next value for t1;
+next value for t1
+10
+select next_value,round from t1;
+next_value	round
+8	0
+select next value for t1;
+next value for t1
+9
+select next_value,round from t1;
+next_value	round
+8	0
+select next value for t1;
+next value for t1
+8
+select next_value,round from t1;
+next_value	round
+6	0
+select next value for t1;
+next value for t1
+7
+select next_value,round from t1;
+next_value	round
+6	0
+select next value for t1;
+next value for t1
+6
+select next_value,round from t1;
+next_value	round
+4	0
+select next value for t1;
+next value for t1
+5
+select next_value,round from t1;
+next_value	round
+4	0
+select next value for t1;
+next value for t1
+4
+select next_value,round from t1;
+next_value	round
+2	0
+select next value for t1;
+next value for t1
+3
+select next_value,round from t1;
+next_value	round
+2	0
+select next value for t1;
+next value for t1
+2
+select next_value,round from t1;
+next_value	round
+0	0
+select next value for t1;
+next value for t1
+1
+select next_value,round from t1;
+next_value	round
+0	0
+select next value for t1;
+next value for t1
+10
+select next_value,round from t1;
+next_value	round
+8	1
+drop sequence t1;
+CREATE SEQUENCE t1 start with 8 minvalue 1 maxvalue 10 increment by 1 cache 2 nocycle;
+select next value for t1;
+next value for t1
+8
+select next value for t1;
+next value for t1
+9
+select next value for t1;
+ERROR HY000: Sequence 'test.t1' has run out
+select next value for t1;
+ERROR HY000: Sequence 'test.t1' has run out
+select next value for t1;
+ERROR HY000: Sequence 'test.t1' has run out
+drop sequence t1;
+CREATE SEQUENCE t1 start with 1 minvalue 1 maxvalue 100 increment by 1 cache 10;
+select next value for t1;
+next value for t1
+1
+flush tables;
+select next value for t1;
+next value for t1
+11
+drop sequence t1;
+create table t1 (a int);
+select next value for t1;
+ERROR HY000: 'test.t1' is not a SEQUENCE
+drop table t1;

@@ -7461,3 +7461,15 @@ ER_END_IDENTIFIER_DOES_NOT_MATCH
         eng "END identifier '%-.192s' does not match '%-.192s'"
 ER_ROW_VARIABLE_DOES_NOT_HAVE_FIELD
         eng "Row variable '%-.192s' does not have a field '%-.192s'"
+ER_SEQUENCE_RUN_OUT
+        eng "Sequence '%-.192s.%-.192s' has run out"
+ER_SEQUENCE_INVALID_DATA
+        eng "Sequence '%-.192s.%-.192s' values are conflicting"
+ER_SEQUENCE_INVALID_TABLE_STRUCTURE
+        eng "Sequence '%-.192s.%-.192s' table structure is invalid"
+ER_SEQUENCE_ACCESS_ERROR
+        eng "Sequence '%-.192s.%-.192s' access error"
+ER_SEQUENCE_BINLOG_FORMAT
+          eng "Sequences requires binlog_format mixed or row"
+ER_NOT_SEQUENCE
+        eng "'%-.192s.%-.192s' is not a SEQUENCE"

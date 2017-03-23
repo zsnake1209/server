@@ -693,6 +693,7 @@ typedef struct system_variables
   ulong session_track_transaction_info;
   my_bool session_track_schema;
   my_bool session_track_state_change;
+  my_bool sequence_read_skip_cache;
 
   ulong threadpool_priority;
 } SV;
@@ -5683,6 +5684,14 @@ public:
   SP Bulk execution optimized
 */
 #define CF_SP_BULK_OPTIMIZED (1U << 20)
+/**
+  If command creates or drops a table
+*/
+#define CF_SCHEMA_CHANGE (1U << 21)
+/**
+  If command creates or drops a database
+*/
+#define CF_DB_CHANGE (1U << 22)
 
 /* Bits in server_command_flags */
 

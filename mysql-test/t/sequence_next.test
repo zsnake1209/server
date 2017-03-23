@@ -1,0 +1,79 @@
+#
+# Test sequence generation
+#
+
+CREATE SEQUENCE t1 start with 1 minvalue 1 maxvalue 10 increment by 1 cache 2 cycle;
+show create table t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+drop sequence t1;
+
+CREATE SEQUENCE t1 minvalue 1 maxvalue 10 increment by -1 cache 2 cycle engine=aria;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+select next value for t1;
+select next_value,round from t1;
+drop sequence t1;
+
+CREATE SEQUENCE t1 start with 8 minvalue 1 maxvalue 10 increment by 1 cache 2 nocycle;
+select next value for t1;
+select next value for t1;
+--error ER_SEQUENCE_RUN_OUT
+select next value for t1;
+--error ER_SEQUENCE_RUN_OUT
+select next value for t1;
+--error ER_SEQUENCE_RUN_OUT
+select next value for t1;
+drop sequence t1;
+
+CREATE SEQUENCE t1 start with 1 minvalue 1 maxvalue 100 increment by 1 cache 10;
+select next value for t1;
+flush tables;
+select next value for t1;
+drop sequence t1;
+
+#
+# Some error testing
+#
+create table t1 (a int);
+--error ER_NOT_SEQUENCE
+select next value for t1;
+drop table t1;

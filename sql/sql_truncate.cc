@@ -216,7 +216,7 @@ Sql_cmd_truncate_table::handler_truncate(THD *thd, TABLE_LIST *table_ref,
       or writing into the table. Yet, to open a write cursor we need
       a thr_lock lock. Allow to open base tables only.
     */
-    table_ref->required_type= FRMTYPE_TABLE;
+    table_ref->required_type= TABLE_TYPE_NORMAL;
     /*
       Ignore pending FLUSH TABLES since we don't want to release
       the MDL lock taken above and otherwise there is no way to

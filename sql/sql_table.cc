@@ -54,7 +54,7 @@
 #include "sql_show.h"
 #include "transaction.h"
 #include "sql_audit.h"
-
+#include "sql_sequence.h"
 
 #ifdef __WIN__
 #include <io.h>
@@ -3181,11 +3181,26 @@ mysql_prepare_create_table(THD *thd, HA_CREATE_INFO *create_info,
   bool tmp_table= create_table_mode == C_ALTER_TABLE;
   DBUG_ENTER("mysql_prepare_create_table");
 
-  select_field_pos= alter_info->create_list.elements - select_field_count;
   null_fields=blob_columns=0;
   create_info->varchar= 0;
   max_key_length= file->max_key_length();
 
+  /* Handle creation of sequences */
+  if (create_info->sequence)
+  {
+    if (!(file->ha_table_flags() & HA_CAN_TABLES_WITHOUT_ROLLBACK))
+    {
+      my_error(ER_ILLEGAL_HA_CREATE_OPTION, MYF(0), file->engine_name()->str,
+               "SEQUENCE");
+      DBUG_RETURN(TRUE);
+    }
+
+    /* The user specified fields: check that structure is ok */
+    if (check_sequence_fields(thd->lex, &alter_info->create_list))
+      DBUG_RETURN(TRUE);
+  }
+
+  select_field_pos= alter_info->create_list.elements - select_field_count;
   for (field_no=0; (sql_field=it++) ; field_no++)
   {
     CHARSET_INFO *save_cs;
@@ -5542,7 +5557,7 @@ int mysql_discard_or_import_tablespace(THD *thd,
   table_list->mdl_request.set_type(MDL_EXCLUSIVE);
   table_list->lock_type= TL_WRITE;
   /* Do not open views. */
-  table_list->required_type= FRMTYPE_TABLE;
+  table_list->required_type= TABLE_TYPE_NORMAL;
 
   if (open_and_lock_tables(thd, table_list, FALSE, 0,
                            &alter_prelocking_strategy))
@@ -7439,6 +7454,9 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
   if (!(used_fields & HA_CREATE_USED_CONNECTION))
     create_info->connect_string= table->s->connect_string;
 
+  if (!(used_fields & HA_CREATE_USED_SEQUENCE))
+    create_info->sequence= table->s->table_type == TABLE_TYPE_SEQUENCE;
+  
   restore_record(table, s->default_values);     // Empty record for DEFAULT
 
   if ((create_info->fields_option_struct= (ha_field_option_struct**)
@@ -8477,7 +8495,7 @@ bool mysql_alter_table(THD *thd,char *new_db, char *new_name,
     Note that RENAME TABLE the only ALTER clause which is supported for views
     has been already processed.
   */
-  table_list->required_type= FRMTYPE_TABLE;
+  table_list->required_type= TABLE_TYPE_NORMAL;
 
   Alter_table_prelocking_strategy alter_prelocking_strategy;
 
@@ -9927,7 +9945,7 @@ bool mysql_checksum_table(THD *thd, TABLE_LIST *tables,
     table->next_global= NULL;
     table->lock_type= TL_READ;
     /* Allow to open real tables only. */
-    table->required_type= FRMTYPE_TABLE;
+    table->required_type= TABLE_TYPE_NORMAL;
 
     if (thd->open_temporary_tables(table) ||
         open_and_lock_tables(thd, table, FALSE, 0))

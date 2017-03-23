@@ -410,6 +410,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  CURSOR_SYM                    /* SQL-2003-R */
 %token  CURSOR_NAME_SYM               /* SQL-2003-N */
 %token  CURTIME                       /* MYSQL-FUNC */
+%token  CYCLE_SYM
 %token  DATABASE
 %token  DATABASES
 %token  DATAFILE_SYM
@@ -548,6 +549,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  IGNORE_SERVER_IDS_SYM
 %token  IMMEDIATE_SYM                 /* SQL-2003-R */
 %token  IMPORT
+%token  INCREMENT_SYM
 %token  INDEXES
 %token  INDEX_SYM
 %token  INFILE
@@ -580,6 +582,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  LANGUAGE_SYM                  /* SQL-2003-R */
 %token  LAST_SYM                      /* SQL-2003-N */
 %token  LAST_VALUE
+%token  LASTVAL_SYM                   /* PostgreSQL sequence function */
 %token  LE                            /* OPERATOR */
 %token  LEADING                       /* SQL-2003-R */
 %token  LEAVES
@@ -651,6 +654,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  MINUTE_MICROSECOND_SYM
 %token  MINUTE_SECOND_SYM
 %token  MINUTE_SYM                    /* SQL-2003-R */
+%token  MINVALUE_SYM
 %token  MIN_ROWS
 %token  MIN_SYM                       /* SQL-2003-N */
 %token  MODE_SYM
@@ -674,6 +678,9 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  NEG
 %token  NEW_SYM                       /* SQL-2003-R */
 %token  NEXT_SYM                      /* SQL-2003-N */
+%token  NEXTVAL_SYM                   /* PostgreSQL sequence function */
+%token  NOCACHE_SYM
+%token  NOCYCLE_SYM
 %token  NODEGROUP_SYM
 %token  NONE_SYM                      /* SQL-2003-R */
 %token  NOT2_SYM
@@ -818,6 +825,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  SELECT_SYM                    /* SQL-2003-R */
 %token  SENSITIVE_SYM                 /* FUTURE-USE */
 %token  SEPARATOR_SYM
+%token  SEQUENCE_SYM
 %token  SERIALIZABLE_SYM              /* SQL-2003-N */
 %token  SERIAL_SYM
 %token  SESSION_SYM                   /* SQL-2003-N */
@@ -4611,7 +4619,7 @@ create_body:
             if (! src_table)
               MYSQL_YYABORT;
             /* CREATE TABLE ... LIKE is not allowed for views. */
-            src_table->required_type= FRMTYPE_TABLE;
+            src_table->required_type= TABLE_TYPE_NORMAL;
           }
         ;
 
@@ -7063,7 +7071,7 @@ alter:
           ALTER
           {
             Lex->name= null_lex_str;
-            Lex->only_view= FALSE;
+            Lex->table_type= TABLE_TYPE_UNKNOWN;
             Lex->sql_command= SQLCOM_ALTER_TABLE;
             Lex->duplicates= DUP_ERROR; 
             Lex->select_lex.init_order();
@@ -7939,7 +7947,7 @@ opt_checksum_type:
 
 repair_table_or_view:
           table_or_tables table_list opt_mi_repair_type
-        | VIEW_SYM { Lex->only_view= TRUE; } table_list opt_view_repair_type
+        | VIEW_SYM { Lex->table_type= TABLE_TYPE_VIEW; } table_list opt_view_repair_type
         ;
 
 repair:
@@ -8104,7 +8112,7 @@ binlog_base64_event:
 
 check_view_or_table:
           table_or_tables table_list opt_mi_check_type
-        | VIEW_SYM { Lex->only_view= TRUE; } table_list opt_view_check_type
+        | VIEW_SYM { Lex->table_type= TABLE_TYPE_VIEW; } table_list opt_view_check_type
         ;
 
 check:    CHECK_SYM
@@ -13054,7 +13062,7 @@ show_param:
             lex->sql_command = SQLCOM_SHOW_CREATE;
             if (!lex->select_lex.add_table_to_list(thd, $3, NULL, 0))
               MYSQL_YYABORT;
-            lex->only_view= 1;
+            lex->table_type= TABLE_TYPE_VIEW;
           }
         | MASTER_SYM STATUS_SYM
           {
@@ -13346,8 +13354,10 @@ opt_flush_lock:
           for (; tables; tables= tables->next_global)
           {
             tables->mdl_request.set_type(MDL_SHARED_NO_WRITE);
-            tables->required_type= FRMTYPE_TABLE; /* Don't try to flush views. */
-            tables->open_type= OT_BASE_ONLY;      /* Ignore temporary tables. */
+            /* Don't try to flush views. */
+            tables->required_type= TABLE_TYPE_NORMAL;
+            /* Ignore temporary tables. */
+            tables->open_type= OT_BASE_ONLY;
           }
         }
         ;
