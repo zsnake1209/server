@@ -3187,6 +3187,7 @@ ha_innobase::ha_innobase(
 		*/
 			  | HA_CAN_EXPORT
 			  | HA_CAN_RTREEKEYS
+                          | HA_CAN_TABLES_WITHOUT_ROLLBACK
 			  | HA_CONCURRENT_OPTIMIZE
 			  |  (srv_force_primary_key ? HA_REQUIRE_PRIMARY_KEY : 0)
 		  ),
@@ -17354,6 +17355,8 @@ ha_innobase::store_lock(
 			 && lock_type <= TL_WRITE))
 		|| sql_command == SQLCOM_CREATE_INDEX
 		|| sql_command == SQLCOM_DROP_INDEX
+		|| sql_command == SQLCOM_CREATE_SEQUENCE
+		|| sql_command == SQLCOM_DROP_SEQUENCE
 		|| sql_command == SQLCOM_DELETE)) {
 
 		ib_senderrf(trx->mysql_thd,
@@ -17383,7 +17386,8 @@ ha_innobase::store_lock(
 		}
 
 	/* Check for DROP TABLE */
-	} else if (sql_command == SQLCOM_DROP_TABLE) {
+	} else if (sql_command == SQLCOM_DROP_TABLE ||
+                   sql_command == SQLCOM_DROP_SEQUENCE) {
 
 		/* MySQL calls this function in DROP TABLE though this table
 		handle may belong to another thd that is running a query. Let
@@ -17427,6 +17431,7 @@ ha_innobase::store_lock(
 			&& (sql_command == SQLCOM_INSERT_SELECT
 			    || sql_command == SQLCOM_REPLACE_SELECT
 			    || sql_command == SQLCOM_UPDATE
+			    || sql_command == SQLCOM_CREATE_SEQUENCE
 			    || sql_command == SQLCOM_CREATE_TABLE))) {
 
 			/* If we either have innobase_locks_unsafe_for_binlog

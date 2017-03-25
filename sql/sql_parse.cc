@@ -101,6 +101,7 @@
 #include "set_var.h"
 #include "log_slow.h"
 #include "sql_bootstrap.h"
+#include "sql_sequence.h"
 
 #include "my_json_writer.h" 
 
@@ -448,6 +449,7 @@ static bool stmt_causes_implicit_commit(THD *thd, uint mask)
 
   switch (lex->sql_command) {
   case SQLCOM_DROP_TABLE:
+  case SQLCOM_DROP_SEQUENCE:
     skip= (lex->tmp_table() ||
            (thd->variables.option_bits & OPTION_GTID_BEGIN));
     break;
@@ -456,6 +458,7 @@ static bool stmt_causes_implicit_commit(THD *thd, uint mask)
     skip= (lex->tmp_table());
     break;
   case SQLCOM_CREATE_TABLE:
+  case SQLCOM_CREATE_SEQUENCE:
     /*
       If CREATE TABLE of non-temporary table and the table is not part
       if a BEGIN GTID ... COMMIT group, do a implicit commit.
@@ -542,21 +545,27 @@ void init_update_queries(void)
   */
   sql_command_flags[SQLCOM_CREATE_TABLE]=   CF_CHANGES_DATA | CF_REEXECUTION_FRAGILE |
                                             CF_AUTO_COMMIT_TRANS | CF_REPORT_PROGRESS |
-                                            CF_CAN_GENERATE_ROW_EVENTS;
+                                            CF_CAN_GENERATE_ROW_EVENTS |
+                                            CF_SCHEMA_CHANGE;
+  sql_command_flags[SQLCOM_CREATE_SEQUENCE]=  (CF_CHANGES_DATA |
+                                            CF_REEXECUTION_FRAGILE |
+                                            CF_AUTO_COMMIT_TRANS |
+                                            CF_SCHEMA_CHANGE);
   sql_command_flags[SQLCOM_CREATE_INDEX]=   CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_REPORT_PROGRESS;
   sql_command_flags[SQLCOM_ALTER_TABLE]=    CF_CHANGES_DATA | CF_WRITE_LOGS_COMMAND |
                                             CF_AUTO_COMMIT_TRANS | CF_REPORT_PROGRESS |
                                             CF_INSERTS_DATA;
   sql_command_flags[SQLCOM_TRUNCATE]=       CF_CHANGES_DATA | CF_WRITE_LOGS_COMMAND |
                                             CF_AUTO_COMMIT_TRANS;
-  sql_command_flags[SQLCOM_DROP_TABLE]=     CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
+  sql_command_flags[SQLCOM_DROP_TABLE]=     CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_SCHEMA_CHANGE;
+  sql_command_flags[SQLCOM_DROP_SEQUENCE]=  CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_SCHEMA_CHANGE;
   sql_command_flags[SQLCOM_LOAD]=           CF_CHANGES_DATA | CF_REEXECUTION_FRAGILE |
                                             CF_CAN_GENERATE_ROW_EVENTS | CF_REPORT_PROGRESS |
                                             CF_INSERTS_DATA;
-  sql_command_flags[SQLCOM_CREATE_DB]=      CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
-  sql_command_flags[SQLCOM_DROP_DB]=        CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
-  sql_command_flags[SQLCOM_CREATE_PACKAGE]= CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
-  sql_command_flags[SQLCOM_DROP_PACKAGE]=   CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
+  sql_command_flags[SQLCOM_CREATE_DB]=      CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_DB_CHANGE;
+  sql_command_flags[SQLCOM_DROP_DB]=        CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_DB_CHANGE;
+  sql_command_flags[SQLCOM_CREATE_PACKAGE]= CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_DB_CHANGE;
+  sql_command_flags[SQLCOM_DROP_PACKAGE]=   CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS | CF_DB_CHANGE;
   sql_command_flags[SQLCOM_CREATE_PACKAGE_BODY]= CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
   sql_command_flags[SQLCOM_DROP_PACKAGE_BODY]= CF_CHANGES_DATA | CF_AUTO_COMMIT_TRANS;
   sql_command_flags[SQLCOM_ALTER_DB_UPGRADE]= CF_AUTO_COMMIT_TRANS;
@@ -725,6 +734,7 @@ void init_update_queries(void)
   sql_command_flags[SQLCOM_TRUNCATE]|= CF_FORCE_ORIGINAL_BINLOG_FORMAT;
   /* We don't want to replicate DROP for temp tables in row format */
   sql_command_flags[SQLCOM_DROP_TABLE]|= CF_FORCE_ORIGINAL_BINLOG_FORMAT;
+  sql_command_flags[SQLCOM_DROP_SEQUENCE]|= CF_FORCE_ORIGINAL_BINLOG_FORMAT;
   /* One can change replication mode with SET */
   sql_command_flags[SQLCOM_SET_OPTION]|= CF_FORCE_ORIGINAL_BINLOG_FORMAT;
 
@@ -767,6 +777,7 @@ void init_update_queries(void)
   */
   sql_command_flags[SQLCOM_CREATE_TABLE]|=    CF_PREOPEN_TMP_TABLES;
   sql_command_flags[SQLCOM_DROP_TABLE]|=      CF_PREOPEN_TMP_TABLES;
+  sql_command_flags[SQLCOM_DROP_SEQUENCE]|=   CF_PREOPEN_TMP_TABLES;
   sql_command_flags[SQLCOM_CREATE_INDEX]|=    CF_PREOPEN_TMP_TABLES;
   sql_command_flags[SQLCOM_ALTER_TABLE]|=     CF_PREOPEN_TMP_TABLES;
   sql_command_flags[SQLCOM_TRUNCATE]|=        CF_PREOPEN_TMP_TABLES;
@@ -799,7 +810,9 @@ void init_update_queries(void)
     have to be closed before temporary tables are pre-opened.
   */
   sql_command_flags[SQLCOM_CREATE_TABLE]|=    CF_HA_CLOSE;
+  sql_command_flags[SQLCOM_CREATE_SEQUENCE]|= CF_HA_CLOSE;
   sql_command_flags[SQLCOM_DROP_TABLE]|=      CF_HA_CLOSE;
+  sql_command_flags[SQLCOM_DROP_SEQUENCE]|=   CF_HA_CLOSE;
   sql_command_flags[SQLCOM_ALTER_TABLE]|=     CF_HA_CLOSE;
   sql_command_flags[SQLCOM_TRUNCATE]|=        CF_HA_CLOSE;
   sql_command_flags[SQLCOM_REPAIR]|=          CF_HA_CLOSE;
@@ -817,8 +830,10 @@ void init_update_queries(void)
     even temporary table DDL should be disallowed.
   */
   sql_command_flags[SQLCOM_CREATE_TABLE]|=     CF_DISALLOW_IN_RO_TRANS;
+  sql_command_flags[SQLCOM_CREATE_SEQUENCE]|=  CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_ALTER_TABLE]|=      CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_DROP_TABLE]|=       CF_DISALLOW_IN_RO_TRANS;
+  sql_command_flags[SQLCOM_DROP_SEQUENCE]|=    CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_RENAME_TABLE]|=     CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_CREATE_INDEX]|=     CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_DROP_INDEX]|=       CF_DISALLOW_IN_RO_TRANS;
@@ -1415,7 +1430,7 @@ out:
 
   This is a helper function to mysql_execute_command.
 
-  @note SQLCOM_MULTI_UPDATE is an exception and delt with elsewhere.
+  @note SQLCOM_MULTI_UPDATE is an exception and dealt with elsewhere.
 
   @see mysql_execute_command
   @returns Status code
@@ -1433,13 +1448,12 @@ static my_bool deny_updates_if_read_only_option(THD *thd,
 
   LEX *lex= thd->lex;
 
-  const my_bool user_is_super=
-    ((ulong)(thd->security_ctx->master_access & SUPER_ACL) ==
-     (ulong)SUPER_ACL);
-
-  if (user_is_super)
+  /* Super user is allowed to do changes */
+  if (((ulong)(thd->security_ctx->master_access & SUPER_ACL) ==
+       (ulong)SUPER_ACL))
     DBUG_RETURN(FALSE);
 
+  /* Check if command doesn't update anything */
   if (!(sql_command_flags[lex->sql_command] & CF_CHANGES_DATA))
     DBUG_RETURN(FALSE);
 
@@ -1447,31 +1461,17 @@ static my_bool deny_updates_if_read_only_option(THD *thd,
   if (lex->sql_command == SQLCOM_UPDATE_MULTI)
     DBUG_RETURN(FALSE);
 
-  const my_bool create_temp_tables= 
-    (lex->sql_command == SQLCOM_CREATE_TABLE) && lex->tmp_table();
+  /* Check if we created and dropped temporary tables */
+  if ((sql_command_flags[lex->sql_command] & CF_SCHEMA_CHANGE) &&
+      lex->tmp_table())
+    DBUG_RETURN(FALSE);
 
-  const my_bool drop_temp_tables= 
-    (lex->sql_command == SQLCOM_DROP_TABLE) && lex->tmp_table();
+  /* Check if we created or dropped databases */
+  if ((sql_command_flags[lex->sql_command] & CF_DB_CHANGE))
+    DBUG_RETURN(TRUE);
 
-  const my_bool update_real_tables=
-    some_non_temp_table_to_be_updated(thd, all_tables) &&
-    !(create_temp_tables || drop_temp_tables);
-
-
-  const my_bool create_or_drop_databases=
-    lex->sql_command == SQLCOM_CREATE_DB ||
-    lex->sql_command == SQLCOM_DROP_DB ||
-    lex->sql_command == SQLCOM_CREATE_PACKAGE ||
-    lex->sql_command == SQLCOM_DROP_PACKAGE;
-
-  if (update_real_tables || create_or_drop_databases)
-  {
-      /*
-        An attempt was made to modify one or more non-temporary tables.
-      */
-      DBUG_RETURN(TRUE);
-  }
-
+  if (some_non_temp_table_to_be_updated(thd, all_tables))
+    DBUG_RETURN(TRUE);
 
   /* Assuming that only temporary tables are modified. */
   DBUG_RETURN(FALSE);
@@ -3356,7 +3356,8 @@ mysql_execute_command(THD *thd)
     */
     if (!(lex->sql_command == SQLCOM_UPDATE_MULTI) &&
 	!(lex->sql_command == SQLCOM_SET_OPTION) &&
-	!(lex->sql_command == SQLCOM_DROP_TABLE &&
+	!((lex->sql_command == SQLCOM_DROP_TABLE ||
+           lex->sql_command == SQLCOM_DROP_SEQUENCE) &&
           lex->tmp_table() && lex->if_exists()) &&
         all_tables_not_ok(thd, all_tables))
     {
@@ -3972,6 +3973,7 @@ mysql_execute_command(THD *thd)
       res = ha_show_status(thd, lex->create_info.db_type, HA_ENGINE_MUTEX);
       break;
     }
+  case SQLCOM_CREATE_SEQUENCE:
   case SQLCOM_CREATE_TABLE:
   {
     DBUG_ASSERT(first_table == all_tables && first_table != 0);
@@ -4229,6 +4231,7 @@ mysql_execute_command(THD *thd)
         /* Regular CREATE TABLE */
         res= mysql_create_table(thd, create_table, &create_info, &alter_info);
       }
+
       if (!res)
       {
         /* So that CREATE TEMPORARY TABLE gets to binlog at commit/rollback */
@@ -4432,9 +4435,9 @@ end_with_restore_list:
       */
 
       DBUG_PRINT("debug", ("lex->only_view: %d, table: %s.%s",
-                           lex->only_view,
+                           lex->table_type == TABLE_TYPE_VIEW,
                            first_table->db, first_table->table_name));
-      if (lex->only_view)
+      if (lex->table_type == TABLE_TYPE_VIEW)
       {
         if (check_table_access(thd, SELECT_ACL, first_table, FALSE, 1, FALSE))
         {
@@ -4448,7 +4451,6 @@ end_with_restore_list:
 
         /* Ignore temporary tables if this is "SHOW CREATE VIEW" */
         first_table->open_type= OT_BASE_ONLY;
-
       }
       else
       {
@@ -4956,6 +4958,7 @@ end_with_restore_list:
     }
     break;
   }
+  case SQLCOM_DROP_SEQUENCE:
   case SQLCOM_DROP_TABLE:
   {
     DBUG_ASSERT(first_table == all_tables && first_table != 0);
@@ -4966,7 +4969,7 @@ end_with_restore_list:
     }
     else
     {
-      status_var_decrement(thd->status_var.com_stat[SQLCOM_DROP_TABLE]);
+      status_var_decrement(thd->status_var.com_stat[lex->sql_command]);
       status_var_increment(thd->status_var.com_drop_tmp_table);
 
       /* So that DROP TEMPORARY TABLE gets to binlog at commit/rollback */
@@ -4996,10 +4999,13 @@ end_with_restore_list:
       lex->create_info.set(DDL_options_st::OPT_IF_EXISTS);
     
     /* DDL and binlog write order are protected by metadata locks. */
-    res= mysql_rm_table(thd, first_table, lex->if_exists(), lex->tmp_table());
+    res= mysql_rm_table(thd, first_table, lex->if_exists(), lex->tmp_table(),
+                        lex->table_type == TABLE_TYPE_SEQUENCE);
 
-    /* when dropping temporary tables if @@session_track_state_change is ON then
-       send the boolean tracker in the OK packet */
+    /*
+      When dropping temporary tables if @@session_track_state_change is ON
+      then send the boolean tracker in the OK packet
+    */
     if(!res && (lex->create_info.options & HA_LEX_CREATE_TMP_TABLE))
     {
       SESSION_TRACKER_CHANGED(thd, SESSION_STATE_CHANGE_TRACKER, NULL);
@@ -8216,6 +8222,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   /* TODO: remove TL_OPTION_FORCE_INDEX as it looks like it's not used */
   ptr->force_index= MY_TEST(table_options & TL_OPTION_FORCE_INDEX);
   ptr->ignore_leaves= MY_TEST(table_options & TL_OPTION_IGNORE_LEAVES);
+  ptr->sequence=      MY_TEST(table_options & TL_OPTION_SEQUENCE);
   ptr->derived=	    table->sel;
   if (!ptr->derived && is_infoschema_db(ptr->db, ptr->db_length))
   {
@@ -8256,8 +8263,8 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   ptr->cacheable_table= !table->is_derived_table();
   ptr->index_hints= index_hints_arg;
   ptr->option= option ? option->str : 0;
-  /* check that used name is unique */
-  if (lock_type != TL_IGNORE)
+  /* check that used name is unique. Sequences are ignored */
+  if (lock_type != TL_IGNORE && !ptr->sequence)
   {
     TABLE_LIST *first_table= table_list.first;
     if (lex->sql_command == SQLCOM_CREATE_VIEW)
@@ -8267,7 +8274,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 	 tables=tables->next_local)
     {
       if (!my_strcasecmp(table_alias_charset, alias_str, tables->alias) &&
-	  !strcmp(ptr->db, tables->db))
+	  !strcmp(ptr->db, tables->db) && ! tables->sequence)
       {
 	my_error(ER_NONUNIQ_TABLE, MYF(0), alias_str); /* purecov: tested */
 	DBUG_RETURN(0);				/* purecov: tested */
@@ -8275,7 +8282,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     }
   }
   /* Store the table reference preceding the current one. */
-  if (table_list.elements > 0)
+  if (table_list.elements > 0 && !ptr->sequence)
   {
     /*
       table_list.next points to the last inserted TABLE_LIST->next_local'
@@ -8300,8 +8307,11 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     Notice that as a side effect here we set the next_local field of the
     previous table reference to 'ptr'. Here we also add one element to the
     list 'table_list'.
+    We don't store sequences into the local list to hide them from INSERT
+    and SELECT.
   */
-  table_list.link_in_list(ptr, &ptr->next_local);
+  if (!ptr->sequence)
+    table_list.link_in_list(ptr, &ptr->next_local);
   ptr->next_name_resolution_table= NULL;
 #ifdef WITH_PARTITION_STORAGE_ENGINE
   ptr->partition_names= partition_names;

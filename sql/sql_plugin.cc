@@ -1658,9 +1658,10 @@ int plugin_init(int *argc, char **argv, int flags)
       char path[FN_REFLEN + 1];
       build_table_filename(path, sizeof(path) - 1, "mysql", "plugin", reg_ext, 0);
       enum legacy_db_type db_type;
-      frm_type_enum frm_type= dd_frm_type(NULL, path, &db_type);
+      bool is_sequence;
+      Table_type frm_type= dd_frm_type(NULL, path, &db_type, &is_sequence);
       /* if mysql.plugin table is MyISAM - load it right away */
-      if (frm_type == FRMTYPE_TABLE && db_type == DB_TYPE_MYISAM)
+      if (frm_type == TABLE_TYPE_NORMAL && db_type == DB_TYPE_MYISAM)
       {
         plugin_load(&tmp_root);
         flags|= PLUGIN_INIT_SKIP_PLUGIN_TABLE;

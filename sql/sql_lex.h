@@ -217,6 +217,7 @@ enum enum_drop_mode
 #define TL_OPTION_FORCE_INDEX	2
 #define TL_OPTION_IGNORE_LEAVES 4
 #define TL_OPTION_ALIAS         8
+#define TL_OPTION_SEQUENCE      16
 
 typedef List<Item> List_item;
 typedef Mem_root_array<ORDER*, true> Group_list_ptrs;
@@ -2621,6 +2622,7 @@ struct LEX: public Query_tables_list
   */
   LEX_USER *definer;
 
+  Table_type table_type;                        /* Used for SHOW CREATE */
   List<Key_part_spec> ref_list;
   List<LEX_USER>      users_list;
   List<LEX_COLUMN>    columns;
@@ -2793,7 +2795,6 @@ public:
 
   Event_parse_data *event_parse_data;
 
-  bool only_view;       /* used for SHOW CREATE TABLE/VIEW */
   /*
     field_list was created for view and should be removed before PS/SP
     rexecuton
@@ -3522,6 +3523,8 @@ public:
     create_info.add(options);
     return check_create_options(create_info);
   }
+  bool sp_add_cfetch(THD *thd, const LEX_STRING &name);
+
   bool set_command_with_check(enum_sql_command command,
                               uint scope,
                               DDL_options_st options)

@@ -18,6 +18,7 @@
 #include "sql_priv.h"
 #include "sql_class.h"
 #include "sql_table.h"
+#include "ha_sequence.h"
 
 static int read_string(File file, uchar**to, size_t length)
 {
@@ -42,45 +43,52 @@ static int read_string(File file, uchar**to, size_t length)
   @param[in]  thd   The current session.
   @param[in]  path  path to FRM file.
   @param[out] dbt   db_type of the table if FRMTYPE_TABLE, otherwise undefined.
+  @param[out] is_sequence  1 if table is a SEQUENCE, 0 otherwise
 
-  @retval  FRMTYPE_ERROR        error
-  @retval  FRMTYPE_TABLE        table
-  @retval  FRMTYPE_VIEW         view
+  @retval  TABLE_TYPE_UNKNOWN   error
+  @retval  TABLE_TYPE_TABLE     table
+  @retval  TABLE_TYPE_SEQUENCE  sequence table
+  @retval  TABLE_TYPE_VIEW      view
 */
 
-frm_type_enum dd_frm_type(THD *thd, char *path, enum legacy_db_type *dbt)
+Table_type dd_frm_type(THD *thd, char *path,
+                       enum legacy_db_type *dbt, bool *is_sequence)
 {
   File file;
-  uchar header[10];     //"TYPE=VIEW\n" it is 10 characters
+  uchar header[40];     //"TYPE=VIEW\n" it is 10 characters
   size_t error;
-  frm_type_enum type= FRMTYPE_ERROR;
+  Table_type type= TABLE_TYPE_UNKNOWN;
   DBUG_ENTER("dd_frm_type");
 
   *dbt= DB_TYPE_UNKNOWN;
+  *is_sequence= 0;
 
-  if ((file= mysql_file_open(key_file_frm, path, O_RDONLY | O_SHARE, MYF(0))) < 0)
-    DBUG_RETURN(FRMTYPE_ERROR);
+  if ((file= mysql_file_open(key_file_frm, path, O_RDONLY | O_SHARE, MYF(0)))
+      < 0)
+    DBUG_RETURN(TABLE_TYPE_UNKNOWN);
   error= mysql_file_read(file, (uchar*) header, sizeof(header), MYF(MY_NABP));
 
   if (error)
     goto err;
-  if (!strncmp((char*) header, "TYPE=VIEW\n", sizeof(header)))
+  if (!strncmp((char*) header, "TYPE=VIEW\n", 10))
   {
-    type= FRMTYPE_VIEW;
+    type= TABLE_TYPE_VIEW;
     goto err;
   }
 
-  type= FRMTYPE_TABLE;
+  type= TABLE_TYPE_NORMAL;
 
   /*
     This is just a check for DB_TYPE. We'll return default unknown type
     if the following test is true (arg #3). This should not have effect
-    on return value from this function (default FRMTYPE_TABLE)
+    on return value from this function (default TABLE_TYPE_NORMAL)
   */
   if (!is_binary_frm_header(header))
     goto err;
 
   *dbt= (enum legacy_db_type) (uint) *(header + 3);
+  if (((header[39] >> 4) & 3) == HA_CHOICE_YES)
+    *is_sequence= 1;
 
   if (*dbt >= DB_TYPE_FIRST_DYNAMIC) /* read the true engine name */
   {
