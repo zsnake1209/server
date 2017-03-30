@@ -13,11 +13,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 
-INCLUDE(FindPkgConfig)
-# http://www.cmake.org/cmake/help/v3.0/module/FindPkgConfig.html
 
 MACRO(CHECK_SYSTEMD)
   IF(UNIX)
+    INCLUDE(FindPkgConfig)
     SET(WITH_SYSTEMD "auto" CACHE STRING "Compile with systemd socket activation and notification")
     IF(WITH_SYSTEMD STREQUAL "yes" OR WITH_SYSTEMD STREQUAL "auto")
       IF(PKG_CONFIG_FOUND)

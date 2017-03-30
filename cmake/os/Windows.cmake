@@ -90,8 +90,8 @@ IF(MSVC)
      "${CMAKE_${type}_LINKER_FLAGS_RELEASE} /debug")
   ENDFOREACH()
   
-  # Force static runtime libraries
-  # - Choose debugging information:
+  # Force C runtime libraries
+  # Force /Z7 for debuginfo
   #     /Z7
   #     Produces an .obj file containing full symbolic debugging
   #     information for use with the debugger. The symbolic debugging
@@ -136,11 +136,12 @@ IF(MSVC)
   #TODO: update the code and remove the disabled warnings
   SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4800 /wd4805 /wd4996")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4800 /wd4805 /wd4996 /wd4291 /wd4577 /we4099")
-
+  set(CMAKE_SYSTEM_IGNORE_PATH ${CMAKE_SYSTEM_IGNORE_PATH})
 ENDIF()
 
-# Always link with socket library
-LINK_LIBRARIES(ws2_32)
+set(CMAKE_SYSTEM_IGNORE_PATH ${CMAKE_SYSTEM_IGNORE_PATH})
+# Always link with socket library crypt is required for 3rd party (like openssl, if it is used)
+LINK_LIBRARIES(ws2_32 crypt32)
 # ..also for tests
 SET(CMAKE_REQUIRED_LIBRARIES ws2_32)
 
