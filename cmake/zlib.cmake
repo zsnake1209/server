@@ -35,38 +35,11 @@ ENDMACRO()
 # ZLIB_LIBRARIES, ZLIB_INCLUDE_DIR and ZLIB_SOURCES
 # are set after this macro has run
 
-MACRO (MYSQL_CHECK_ZLIB_WITH_COMPRESS)
-
-  IF(CMAKE_SYSTEM_NAME STREQUAL "OS400" OR 
-     CMAKE_SYSTEM_NAME STREQUAL "AIX" OR
-     CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    # Use bundled zlib on some platforms by default (system one is too
-    # old or not existent)
-    IF (NOT WITH_ZLIB)
-      SET(WITH_ZLIB "bundled"  CACHE STRING "By default use bundled zlib on this platform")
-    ENDIF()
-  ENDIF()
-  
+MACRO (MYSQL_CHECK_ZLIB_WITH_COMPRESS)  
   IF(WITH_ZLIB STREQUAL "bundled")
     MYSQL_USE_BUNDLED_ZLIB()
   ELSE()
-    INCLUDE(FindZLIB)
-    IF(ZLIB_FOUND)
-     INCLUDE(CheckFunctionExists)
-      SET(CMAKE_REQUIRED_LIBRARIES z)
-      CHECK_FUNCTION_EXISTS(crc32 HAVE_CRC32)
-      CHECK_FUNCTION_EXISTS(compressBound HAVE_COMPRESSBOUND)
-      CHECK_FUNCTION_EXISTS(deflateBound HAVE_DEFLATEBOUND)
-      SET(CMAKE_REQUIRED_LIBRARIES)
-      IF(HAVE_CRC32 AND HAVE_COMPRESSBOUND AND HAVE_DEFLATEBOUND)
-        SET(WITH_ZLIB "system" CACHE STRING
-          "Which zlib to use (possible values are 'bundled' or 'system')")
-        SET(ZLIB_SOURCES "")
-      ELSE()
-        SET(ZLIB_FOUND FALSE CACHE INTERNAL "Zlib found but not usable")
-        MESSAGE(STATUS "system zlib found but not usable")
-      ENDIF()
-    ENDIF()
+    FIND_PACKAGE(ZLIB)
     IF(NOT ZLIB_FOUND)
       MYSQL_USE_BUNDLED_ZLIB()
     ENDIF()
