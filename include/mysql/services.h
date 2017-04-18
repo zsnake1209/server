@@ -37,6 +37,9 @@ extern "C" {
 #include <mysql/service_thd_specifics.h>
 #include <mysql/service_thd_timezone.h>
 #include <mysql/service_thd_wait.h>
+#include <mysql/service_my_crypt.h>
+#include <mysql/service_my_print_error.h>
+#include <mysql/service_error_log.h>
 /*#include <mysql/service_wsrep.h>*/
 
 #ifdef __cplusplus
