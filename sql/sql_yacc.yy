@@ -1326,6 +1326,8 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  PARTITIONING_SYM
 %token  PASSWORD_SYM
 %token  PERCENT_RANK_SYM
+%token  PERCENTILE_CONT_SYM
+%token  PERCENTILE_DISC_SYM
 %token  PERSISTENT_SYM
 %token  PHASE_SYM
 %token  PLUGINS_SYM
@@ -1572,6 +1574,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
 %token  WINDOW_SYM
 %token  WHILE_SYM
 %token  WITH                          /* SQL-2003-R */
+%token  WITHIN
 %token  WITH_CUBE_SYM                 /* INTERNAL */
 %token  WITH_ROLLUP_SYM               /* INTERNAL */
 %token  WORK_SYM                      /* SQL-2003-N */
@@ -1731,6 +1734,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, ulong *yystacksize);
         window_func_expr
         window_func
         simple_window_func
+        inverse_distribution_function
         function_call_keyword
         function_call_nonkeyword
         function_call_generic
@@ -1948,7 +1952,6 @@ END_OF_INPUT
 
 %type <spvar_definition> row_field_name row_field_definition
 %type <spvar_definition_list> row_field_definition_list row_type_body
-
 %type <NONE> opt_window_clause window_def_list window_def window_spec
 %type <lex_str_ptr> window_name
 %type <NONE> opt_window_ref opt_window_frame_clause
@@ -9364,6 +9367,7 @@ column_default_non_parenthesized_expr:
         | variable
         | sum_expr
         | window_func_expr
+        | inverse_distribution_function
         | ROW_SYM '(' expr ',' expr_list ')'
           {
             $5->push_front($3, thd->mem_root);
@@ -10670,6 +10674,25 @@ simple_window_func:
               MYSQL_YYABORT;
           }
         ;
+
+
+inverse_distribution_function:
+        inverse_distribution_function_type '(' expr ')' WITHIN GROUP_SYM
+        '(' order_by_single_element_list ')' OVER_SYM '(' opt_window_ref opt_window_partition_clause ')'
+        {
+           my_yyabort_error((ER_VIEW_SELECT_VARIABLE, MYF(0)));
+        };
+
+inverse_distribution_function_type:
+     PERCENTILE_CONT_SYM
+      {}
+    |PERCENTILE_DISC_SYM
+    {}
+    ;
+
+order_by_single_element_list:
+    ORDER_SYM BY order_ident order_dir
+    ;
 
 window_name:
           ident
