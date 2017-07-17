@@ -7490,3 +7490,11 @@ ER_WRONG_INSERT_INTO_SEQUENCE
         eng "Wrong INSERT into a SEQUENCE. One can only do single table INSERT into a squence object (like with mysqldump).  If you want to change the SEQUENCE, use ALTER SEQUENCE instead."
 ER_SP_STACK_TRACE
         eng "At line %u in %s"
+ER_NOT_SINGLE_ELEMENT_ORDER_LIST
+        eng "Incorrect number of elements in the order list for '%s'"
+ER_WRONG_TYPE_FOR_PERCENTILE_CONT
+        eng "Numeric datatype is required for Percentile_CONT function"
+ER_ARGUMENT_NOT_CONSTANT
+        eng "Argument to the percentile functions is not a constant"
+ER_ARGUMENT_OUT_OF_RANGE
+        eng "Argument to the percentile functions does not belong to the range [0,1]"
