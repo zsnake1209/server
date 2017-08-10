@@ -245,89 +245,97 @@ trx_sys_print_mysql_binlog_offset()
 static long long trx_sys_cur_xid_seqno = -1;
 static unsigned char trx_sys_cur_xid_uuid[16];
 
-long long read_wsrep_xid_seqno(const XID* xid)
+/** Read WSREP XID seqno */
+static inline long long read_wsrep_xid_seqno(const XID* xid)
 {
 	long long seqno;
 	memcpy(&seqno, xid->data + 24, sizeof(long long));
 	return seqno;
 }
 
-void read_wsrep_xid_uuid(const XID* xid, unsigned char* buf)
+/** Read WSREP XID UUID */
+static inline void read_wsrep_xid_uuid(const XID* xid, unsigned char* buf)
 {
 	memcpy(buf, xid->data + 8, 16);
 }
 
 #endif /* UNIV_DEBUG */
 
+/** Update WSREP XID info in sys_header of TRX_SYS_PAGE_NO = 5.
+@param[in]	xid		Transaction XID
+@param[in,out]	sys_header	sys_header
+@param[in]	mtr		minitransaction */
 void
 trx_sys_update_wsrep_checkpoint(
-/*============================*/
-	const XID*	xid,		/*!< in: transaction XID */
-	trx_sysf_t*	sys_header,	/*!< in: sys_header */
-	mtr_t*		mtr)		/*!< in: mtr */
+	const XID*	xid,
+	trx_sysf_t*	sys_header,
+	mtr_t*		mtr)
 {
 #ifdef UNIV_DEBUG
-	{
+	if (xid->formatID != -1
+	    && mach_read_from_4(sys_header + TRX_SYS_WSREP_XID_INFO
+			+ TRX_SYS_WSREP_XID_MAGIC_N_FLD)
+		== TRX_SYS_WSREP_XID_MAGIC_N) {
 		/* Check that seqno is monotonically increasing */
 		unsigned char xid_uuid[16];
 		long long xid_seqno = read_wsrep_xid_seqno(xid);
 		read_wsrep_xid_uuid(xid, xid_uuid);
-		if (!memcmp(xid_uuid, trx_sys_cur_xid_uuid, 16))
-		{
+
+		if (!memcmp(xid_uuid, trx_sys_cur_xid_uuid, 8)) {
 			/*
 			This check is a protection against the initial seqno (-1)
 			assigned in read_wsrep_xid_uuid(), which, if not checked,
 			would cause the following assertion to fail.
 			*/
-			if (xid_seqno > -1 )
-			{
+			if (xid_seqno > -1 ) {
 				ut_ad(xid_seqno > trx_sys_cur_xid_seqno);
+				trx_sys_cur_xid_seqno = xid_seqno;
 			}
 		} else {
 			memcpy(trx_sys_cur_xid_uuid, xid_uuid, 16);
 		}
+
 		trx_sys_cur_xid_seqno = xid_seqno;
 	}
 #endif /* UNIV_DEBUG */
 
-		ut_ad(xid && mtr);
-		ut_a(xid->formatID == -1 || wsrep_is_wsrep_xid(xid));
+	ut_ad(xid && mtr);
+	ut_a(xid->formatID == -1 || wsrep_is_wsrep_xid((const xid_t *)xid));
 
-		if (mach_read_from_4(sys_header + TRX_SYS_WSREP_XID_INFO
-				+ TRX_SYS_WSREP_XID_MAGIC_N_FLD)
-			!= TRX_SYS_WSREP_XID_MAGIC_N) {
-			mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
-				+ TRX_SYS_WSREP_XID_MAGIC_N_FLD,
-				TRX_SYS_WSREP_XID_MAGIC_N,
-				MLOG_4BYTES, mtr);
-		}
+	if (mach_read_from_4(sys_header + TRX_SYS_WSREP_XID_INFO
+			+ TRX_SYS_WSREP_XID_MAGIC_N_FLD)
+		!= TRX_SYS_WSREP_XID_MAGIC_N) {
+		mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
+			+ TRX_SYS_WSREP_XID_MAGIC_N_FLD,
+			TRX_SYS_WSREP_XID_MAGIC_N,
+			MLOG_4BYTES, mtr);
+	}
 
-		mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
-			+ TRX_SYS_WSREP_XID_FORMAT,
-			(int)xid->formatID,
-			MLOG_4BYTES, mtr);
-		mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
-			+ TRX_SYS_WSREP_XID_GTRID_LEN,
-			(int)xid->gtrid_length,
-			MLOG_4BYTES, mtr);
-		mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
-			+ TRX_SYS_WSREP_XID_BQUAL_LEN,
-			(int)xid->bqual_length,
-			MLOG_4BYTES, mtr);
-		mlog_write_string(sys_header + TRX_SYS_WSREP_XID_INFO
-			+ TRX_SYS_WSREP_XID_DATA,
-			(const unsigned char*) xid->data,
-			XIDDATASIZE, mtr);
-
+	mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
+		+ TRX_SYS_WSREP_XID_FORMAT,
+		(int)xid->formatID,
+		MLOG_4BYTES, mtr);
+	mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
+		+ TRX_SYS_WSREP_XID_GTRID_LEN,
+		(int)xid->gtrid_length,
+		MLOG_4BYTES, mtr);
+	mlog_write_ulint(sys_header + TRX_SYS_WSREP_XID_INFO
+		+ TRX_SYS_WSREP_XID_BQUAL_LEN,
+		(int)xid->bqual_length,
+		MLOG_4BYTES, mtr);
+	mlog_write_string(sys_header + TRX_SYS_WSREP_XID_INFO
+		+ TRX_SYS_WSREP_XID_DATA,
+		(const unsigned char*) xid->data,
+		XIDDATASIZE, mtr);
 }
 
-/** Read WSREP checkpoint XID from sys header.
-@param[out]	xid	WSREP XID
+/** Read WSREP XID from sys_header of TRX_SYS_PAGE_NO = 5.
+@param[out]	xid	Transaction XID
 @return	whether the checkpoint was present */
 bool
 trx_sys_read_wsrep_checkpoint(XID* xid)
 {
-	trx_sysf_t*	sys_header;
+	trx_sysf_t* sys_header;
 	mtr_t		mtr;
 	ulint		magic;
 
@@ -338,12 +346,13 @@ trx_sys_read_wsrep_checkpoint(XID* xid)
 	sys_header = trx_sysf_get(&mtr);
 
 	if ((magic = mach_read_from_4(sys_header + TRX_SYS_WSREP_XID_INFO
-					+ TRX_SYS_WSREP_XID_MAGIC_N_FLD))
-	    != TRX_SYS_WSREP_XID_MAGIC_N) {
+				+ TRX_SYS_WSREP_XID_MAGIC_N_FLD))
+		!= TRX_SYS_WSREP_XID_MAGIC_N) {
 		memset(xid, 0, sizeof(*xid));
 		long long seqno= -1;
 		memcpy(xid->data + 24, &seqno, sizeof(long long));
 		xid->formatID = -1;
+		trx_sys_update_wsrep_checkpoint(xid, sys_header, &mtr);
 		mtr_commit(&mtr);
 		return false;
 	}
