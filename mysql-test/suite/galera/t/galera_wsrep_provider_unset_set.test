@@ -26,6 +26,8 @@ INSERT INTO t1 VALUES (3);
 --eval SET GLOBAL wsrep_cluster_address = '$wsrep_cluster_address_orig';
 --enable_query_log
 
+SET SESSION wsrep_sync_wait = 0;
+
 --source include/wait_until_connected_again.inc
 --source include/galera_wait_ready.inc
 

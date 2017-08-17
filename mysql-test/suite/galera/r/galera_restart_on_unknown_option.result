@@ -38,3 +38,5 @@ f1	f2
 2	d
 3	d
 DROP TABLE t1;
+set GLOBAL auto_increment_offset = 1;
+set GLOBAL auto_increment_offset = 2;

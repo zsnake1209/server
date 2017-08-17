@@ -29,9 +29,10 @@ SET SESSION wsrep_on = ON;
 
 --connection node_1
 CALL mtr.add_suppression("Failed to set packet size");
+set GLOBAL auto_increment_offset = 1;
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 'ON' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_ready';
 --source include/wait_condition.inc
 CALL mtr.add_suppression("Failed to set packet size");
-
+set GLOBAL auto_increment_offset = 2;

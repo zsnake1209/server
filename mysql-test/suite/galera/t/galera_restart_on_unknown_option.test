@@ -126,6 +126,12 @@ SELECT * FROM t1;
 
 DROP TABLE t1;
 
+set GLOBAL auto_increment_offset = 1;
+
+--connection node_2
+
+set GLOBAL auto_increment_offset = 2;
+
 #
 # We should count the number of "Assertion failed" warnings
 # in the log file during test phase - to print the error message
