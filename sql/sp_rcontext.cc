@@ -30,15 +30,44 @@
 #include "sql_acl.h"                        // SELECT_ACL
 #include "sql_parse.h"                      // check_table_access
 
+
+Sp_rcontext_handler_local sp_rcontext_handler_local;
+Sp_rcontext_handler_package_body sp_rcontext_handler_package_body;
+
+sp_rcontext *Sp_rcontext_handler_local::get_rcontext(sp_rcontext *ctx) const
+{
+  return ctx;
+}
+
+sp_rcontext *Sp_rcontext_handler_package_body::get_rcontext(sp_rcontext *ctx) const
+{
+  return ctx->m_sp->m_parent->m_rcontext;
+}
+
+const LEX_CSTRING *Sp_rcontext_handler_local::get_name_prefix() const
+{
+  return &empty_clex_str;
+}
+
+const LEX_CSTRING *Sp_rcontext_handler_package_body::get_name_prefix() const
+{
+  static const LEX_CSTRING sp_package_body_variable_prefix_clex_str=
+                           {C_STRING_WITH_LEN("PACKAGE_BODY.")};
+  return &sp_package_body_variable_prefix_clex_str;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////
 // sp_rcontext implementation.
 ///////////////////////////////////////////////////////////////////////////
 
 
-sp_rcontext::sp_rcontext(const sp_pcontext *root_parsing_ctx,
+sp_rcontext::sp_rcontext(const sp_head *owner,
+                         const sp_pcontext *root_parsing_ctx,
                          Field *return_value_fld,
                          bool in_sub_stmt)
   :end_partial_result_set(false),
+   m_sp(owner),
    m_root_parsing_ctx(root_parsing_ctx),
    m_var_table(NULL),
    m_return_value_fld(return_value_fld),
@@ -61,11 +90,12 @@ sp_rcontext::~sp_rcontext()
 
 
 sp_rcontext *sp_rcontext::create(THD *thd,
+                                 const sp_head *owner,
                                  const sp_pcontext *root_parsing_ctx,
                                  Field *return_value_fld,
                                  bool resolve_type_refs)
 {
-  sp_rcontext *ctx= new (thd->mem_root) sp_rcontext(root_parsing_ctx,
+  sp_rcontext *ctx= new (thd->mem_root) sp_rcontext(owner, root_parsing_ctx,
                                                     return_value_fld,
                                                     thd->in_sub_stmt);
 
@@ -655,13 +685,13 @@ int sp_rcontext::set_variable_row_field(THD *thd, uint var_idx, uint field_idx,
 int sp_rcontext::set_variable_row(THD *thd, uint var_idx, List<Item> &items)
 {
   DBUG_ENTER("sp_rcontext::set_variable_row");
-  DBUG_ASSERT(thd->spcont->get_item(var_idx)->cols() == items.elements);
+  DBUG_ASSERT(get_item(var_idx)->cols() == items.elements);
   List_iterator<Item> it(items);
   Item *item;
   for (uint i= 0 ; (item= it++) ; i++)
   {
     int rc;
-    if ((rc= thd->spcont->set_variable_row_field(thd, var_idx, i, &item)))
+    if ((rc= set_variable_row_field(thd, var_idx, i, &item)))
       DBUG_RETURN(rc);
   }
   DBUG_RETURN(0);
