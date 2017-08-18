@@ -3114,6 +3114,7 @@ sub mysql_install_db {
   mtr_add_arg($args, "--disable-sync-frm");
   mtr_add_arg($args, "--tmpdir=%s", "$opt_vardir/tmp/");
   mtr_add_arg($args, "--core-file");
+  mtr_add_arg($args, "--console");
 
   if ( $opt_debug )
   {
@@ -3156,92 +3157,95 @@ sub mysql_install_db {
   # ----------------------------------------------------------------------
   # Create the bootstrap.sql file
   # ----------------------------------------------------------------------
-  my $bootstrap_sql_file= "$opt_vardir/tmp/bootstrap.sql";
+  my $bootstrap_sql_file= "$opt_vardir/log/bootstrap.sql";
 
-  if ($opt_boot_gdb) {
-    gdb_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
-		  $bootstrap_sql_file);
-  }
-  if ($opt_boot_dbx) {
-    dbx_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
-		  $bootstrap_sql_file);
-  }
-  if ($opt_boot_ddd) {
-    ddd_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
-		  $bootstrap_sql_file);
-  }
-
-  my $path_sql= my_find_file($install_basedir,
-			     ["mysql", "sql/share", "share/mariadb",
-			      "share/mysql", "share", "scripts"],
-			     "mysql_system_tables.sql",
-			     NOT_REQUIRED);
-
-  if (-f $path_sql )
+  if (! -e $bootstrap_sql_file)
   {
-    my $sql_dir= dirname($path_sql);
-    # Use the mysql database for system tables
-    mtr_tofile($bootstrap_sql_file, "use mysql;\n");
+    if ($opt_boot_gdb) {
+      gdb_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
+        $bootstrap_sql_file);
+    }
+    if ($opt_boot_dbx) {
+      dbx_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
+        $bootstrap_sql_file);
+    }
+    if ($opt_boot_ddd) {
+      ddd_arguments(\$args, \$exe_mysqld_bootstrap, $mysqld->name(),
+        $bootstrap_sql_file);
+    }
 
-    # Add the offical mysql system tables
-    # for a production system
-    mtr_appendfile_to_file("$sql_dir/mysql_system_tables.sql",
-			   $bootstrap_sql_file);
+    my $path_sql= my_find_file($install_basedir,
+             ["mysql", "sql/share", "share/mariadb",
+              "share/mysql", "share", "scripts"],
+             "mysql_system_tables.sql",
+             NOT_REQUIRED);
 
-    # Add the performance tables
-    # for a production system
-    mtr_appendfile_to_file("$sql_dir/mysql_performance_tables.sql",
-                          $bootstrap_sql_file);
+    if (-f $path_sql )
+    {
+      my $sql_dir= dirname($path_sql);
+      # Use the mysql database for system tables
+      mtr_tofile($bootstrap_sql_file, "use mysql;\n");
 
-    # Add the mysql system tables initial data
-    # for a production system
-    mtr_appendfile_to_file("$sql_dir/mysql_system_tables_data.sql",
-			   $bootstrap_sql_file);
+      # Add the offical mysql system tables
+      # for a production system
+      mtr_appendfile_to_file("$sql_dir/mysql_system_tables.sql",
+           $bootstrap_sql_file);
 
-    # Add test data for timezone - this is just a subset, on a real
-    # system these tables will be populated either by mysql_tzinfo_to_sql
-    # or by downloading the timezone table package from our website
-    mtr_appendfile_to_file("$sql_dir/mysql_test_data_timezone.sql",
-			   $bootstrap_sql_file);
+      # Add the performance tables
+      # for a production system
+      mtr_appendfile_to_file("$sql_dir/mysql_performance_tables.sql",
+                            $bootstrap_sql_file);
 
-    # Fill help tables, just an empty file when running from bk repo
-    # but will be replaced by a real fill_help_tables.sql when
-    # building the source dist
-    mtr_appendfile_to_file("$sql_dir/fill_help_tables.sql",
-			   $bootstrap_sql_file);
+      # Add the mysql system tables initial data
+      # for a production system
+      mtr_appendfile_to_file("$sql_dir/mysql_system_tables_data.sql",
+           $bootstrap_sql_file);
 
-    # mysql.gtid_slave_pos was created in InnoDB, but many tests
-    # run without InnoDB. Alter it to MyISAM now
-    mtr_tofile($bootstrap_sql_file, "ALTER TABLE gtid_slave_pos ENGINE=MyISAM;\n");
-  }
-  else
-  {
-    # Install db from init_db.sql that exist in early 5.1 and 5.0
-    # versions of MySQL
-    my $init_file= "$install_basedir/mysql-test/lib/init_db.sql";
-    mtr_report(" - from '$init_file'");
-    my $text= mtr_grab_file($init_file) or
-      mtr_error("Can't open '$init_file': $!");
+      # Add test data for timezone - this is just a subset, on a real
+      # system these tables will be populated either by mysql_tzinfo_to_sql
+      # or by downloading the timezone table package from our website
+      mtr_appendfile_to_file("$sql_dir/mysql_test_data_timezone.sql",
+           $bootstrap_sql_file);
 
+      # Fill help tables, just an empty file when running from bk repo
+      # but will be replaced by a real fill_help_tables.sql when
+      # building the source dist
+      mtr_appendfile_to_file("$sql_dir/fill_help_tables.sql",
+           $bootstrap_sql_file);
+
+      # mysql.gtid_slave_pos was created in InnoDB, but many tests
+      # run without InnoDB. Alter it to MyISAM now
+      mtr_tofile($bootstrap_sql_file, "ALTER TABLE gtid_slave_pos ENGINE=MyISAM;\n");
+    }
+    else
+    {
+      # Install db from init_db.sql that exist in early 5.1 and 5.0
+      # versions of MySQL
+      my $init_file= "$install_basedir/mysql-test/lib/init_db.sql";
+      mtr_report(" - from '$init_file'");
+      my $text= mtr_grab_file($init_file) or
+        mtr_error("Can't open '$init_file': $!");
+
+      mtr_tofile($bootstrap_sql_file,
+           sql_to_bootstrap($text));
+    }
+
+    # Remove anonymous users
     mtr_tofile($bootstrap_sql_file,
-	       sql_to_bootstrap($text));
+         "DELETE FROM mysql.user where user= '';\n");
+
+    # Create mtr database
+    mtr_tofile($bootstrap_sql_file,
+         "CREATE DATABASE mtr CHARSET=latin1;\n");
+
+    # Add help tables and data for warning detection and supression
+    mtr_tofile($bootstrap_sql_file,
+               sql_to_bootstrap(mtr_grab_file("include/mtr_warnings.sql")));
+
+    # Add procedures for checking server is restored after testcase
+    mtr_tofile($bootstrap_sql_file,
+               sql_to_bootstrap(mtr_grab_file("include/mtr_check.sql")));
   }
-
-  # Remove anonymous users
-  mtr_tofile($bootstrap_sql_file,
-	     "DELETE FROM mysql.user where user= '';\n");
-
-  # Create mtr database
-  mtr_tofile($bootstrap_sql_file,
-	     "CREATE DATABASE mtr CHARSET=latin1;\n");
-
-  # Add help tables and data for warning detection and supression
-  mtr_tofile($bootstrap_sql_file,
-             sql_to_bootstrap(mtr_grab_file("include/mtr_warnings.sql")));
-
-  # Add procedures for checking server is restored after testcase
-  mtr_tofile($bootstrap_sql_file,
-             sql_to_bootstrap(mtr_grab_file("include/mtr_check.sql")));
 
   # Log bootstrap command
   my $path_bootstrap_log= "$opt_vardir/log/bootstrap.log";
