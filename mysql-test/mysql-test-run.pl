@@ -3105,8 +3105,9 @@ sub mysql_install_db {
   mtr_add_arg($args, "--bootstrap");
   mtr_add_arg($args, "--basedir=%s", $install_basedir);
   mtr_add_arg($args, "--datadir=%s", $install_datadir);
+  mtr_add_arg($args, "--plugin-dir=%s", $plugindir);
   mtr_add_arg($args, "--default-storage-engine=myisam");
-  mtr_add_arg($args, "--skip-plugin-$_") for @optional_plugins;
+  mtr_add_arg($args, "--loose-skip-plugin-$_") for @optional_plugins;
   # starting from 10.0 bootstrap scripts require InnoDB
   mtr_add_arg($args, "--loose-innodb");
   mtr_add_arg($args, "--loose-innodb-log-file-size=5M");
@@ -3134,9 +3135,7 @@ sub mysql_install_db {
   # InnoDB options can come not only from the command line, but also
   # from option files or combinations
   foreach my $extra_opt ( @$extra_opts ) {
-    if ($extra_opt =~ /--innodb/) {
-      mtr_add_arg($args, $extra_opt);
-    }
+    mtr_add_arg($args, $extra_opt);
   }
 
   # If DISABLE_GRANT_OPTIONS is defined when the server is compiled (e.g.,
