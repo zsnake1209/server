@@ -1,3 +1,4 @@
+source include/innodb_undo_tablespaces.inc;
 source include/have_file_key_management.inc;
 
 CREATE TABLE t(c VARCHAR(10)) ENGINE INNODB encrypted=yes;

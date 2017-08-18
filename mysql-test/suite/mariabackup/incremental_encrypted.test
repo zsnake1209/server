@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 if (!$EXAMPLE_KEY_MANAGEMENT_SO)
 {
   --skip needs example_key_management plugin

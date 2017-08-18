@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 # Test --databases-exclude and --tables-exclude feature of xtrabackup 2.3.8
 
 CREATE TABLE t1(i INT) ENGINE INNODB;

@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 if (`SELECT COUNT(*)=0 FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME = 'aws_key_management' AND PLUGIN_STATUS='ACTIVE'`)
 {
   --skip needs aws_key_management plugin plugin

@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 # Check if ibd smaller than page size are skipped
 # It is possible, due to race conditions that new file
 # is created by server while xtrabackup is running

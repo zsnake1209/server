@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 CREATE TABLE t1(c1 INT, b CHAR(20)) ENGINE=INNODB PAGE_COMPRESSED=1;
 
 DELIMITER //;

@@ -1,3 +1,4 @@
+source include/innodb_undo_tablespaces.inc;
 source include/have_file_key_management.inc;
 
 CREATE TABLE t1(c1 INT, b VARCHAR(2400), index(b(100),c1)) ENGINE=INNODB ROW_FORMAT=compressed ENCRYPTED=YES;

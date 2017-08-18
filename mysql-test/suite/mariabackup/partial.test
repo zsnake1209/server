@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 # Export single table from backup
 # (xtrabackup with --prepare --export)
 

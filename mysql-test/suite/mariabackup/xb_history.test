@@ -1,3 +1,5 @@
+--source include/innodb_undo_tablespaces.inc
+
 let $targetdir=$MYSQLTEST_VARDIR/tmp/backup;
 --disable_result_log
 exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf --history=foo --backup --target-dir=$targetdir;
