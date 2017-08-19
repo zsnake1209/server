@@ -3133,11 +3133,6 @@ sub mysql_install_db {
       mtr_add_arg($args, $extra_opt);
     }
   }
-  # InnoDB options can come not only from the command line, but also
-  # from option files or combinations
-  foreach my $extra_opt ( @$extra_opts ) {
-    mtr_add_arg($args, $extra_opt);
-  }
 
   # If DISABLE_GRANT_OPTIONS is defined when the server is compiled (e.g.,
   # configure --disable-grant-options), mysqld will not recognize the
@@ -3152,7 +3147,14 @@ sub mysql_install_db {
   # ----------------------------------------------------------------------
   $ENV{'MYSQLD_BOOTSTRAP_CMD'}= "$exe_mysqld_bootstrap " . join(" ", @$args);
 
-
+  # Extra options can come not only from the command line, but also
+  # from option files or combinations. We want them on a command line
+  # that is executed now, because otherwise the datadir might be 
+  # incompatible with the test settings, but not on the general
+  # $MYSQLD_BOOTSTRAP_CMD line
+  foreach my $extra_opt ( @$extra_opts ) {
+    mtr_add_arg($args, $extra_opt);
+  }
 
   # ----------------------------------------------------------------------
   # Create the bootstrap.sql file
