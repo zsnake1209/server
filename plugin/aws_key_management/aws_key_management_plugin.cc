@@ -503,7 +503,7 @@ int aws_generate_encrypted_key(Aws::Utils::ByteBuffer *result)
 
 static int generate_encrypted_key(Aws::Utils::ByteBuffer *output)
 {
-#ifdef WITH_AWS_MOCK
+#if WITH_AWS_MOCK
    if(mock)
      return mock_generate_encrypted_key(output);
 #endif
