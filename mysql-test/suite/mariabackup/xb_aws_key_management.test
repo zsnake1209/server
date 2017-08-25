@@ -5,7 +5,7 @@ if (`SELECT COUNT(*)=0 FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME = 'aws_
 
 if (`SELECT @@aws_key_management_master_key_id=''`)
 {
-  --skip Test requires AWS_KEY_MANAGEMEMENT_MASTER_KEY_ID env. variable
+  --skip Test requires AWS_KEY_MANAGEMENT_MASTER_KEY_ID env. variable
 }
 
 CREATE TABLE t(c VARCHAR(10)) ENGINE INNODB encrypted=yes;
