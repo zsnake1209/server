@@ -752,7 +752,6 @@ public:
       if (prev_value >1 || prev_value < 0)
       {
         my_error(ER_ARGUMENT_OUT_OF_RANGE, MYF(0));
-        has_error= TRUE;
         return true;
       }
       first_call= false;
@@ -763,7 +762,6 @@ public:
     if (prev_value !=  arg_val)
     {
       my_error(ER_ARGUMENT_NOT_CONSTANT, MYF(0));
-      has_error= TRUE;
       return true;
     }
 
@@ -790,7 +788,6 @@ public:
 
   void clear()
   {
-    has_error= false;
     val_calculated= false;
     first_call= true;
     value->clear();
@@ -875,7 +872,6 @@ public:
       if (prev_value >1 || prev_value < 0)
       {
         my_error(ER_ARGUMENT_OUT_OF_RANGE, MYF(0));
-        has_error= TRUE;
         return true;
       }
     }
@@ -884,7 +880,6 @@ public:
     if (prev_value !=  arg_val)
     {
       my_error(ER_ARGUMENT_NOT_CONSTANT, MYF(0));
-      has_error= TRUE;
       return true;
     }
 
@@ -922,7 +917,6 @@ public:
   void clear()
   {
     first_call= true;
-    has_error= false;
     floor_value->clear();
     ceil_value->clear();
     floor_val_calculated= false;
