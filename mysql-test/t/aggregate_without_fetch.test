@@ -1,8 +1,0 @@
-delimiter |;
---error ER_INVALID_AGGREGATE_FUNCTION
-create aggregate function agg_sum(x INT) returns INT
-begin
-insert into t1(sal) values (x);
-return x;
-end|
-delimiter ;|
