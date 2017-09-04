@@ -4030,6 +4030,13 @@ end_with_restore_list:
     Master_info *mi;
     int load_error;
 
+#ifdef WITH_WSREP
+    if (WSREP_ON && !opt_log_slave_updates)
+    {
+      my_message(ER_SLAVE_CONFIGURATION, "bad configuration no log_slave_updates defined, slave would not replicate further to wsrep cluster", MYF(0));
+      goto error;
+    }
+#endif /* WITH_WSREP */
     load_error= rpl_load_gtid_slave_state(thd);
 
     /*

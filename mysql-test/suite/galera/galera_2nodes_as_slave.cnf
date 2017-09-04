@@ -7,6 +7,7 @@
 
 [mysqld]
 binlog-format=row
+log-slave-updates
 
 [mysqld.1]
 log-bin
@@ -20,7 +21,6 @@ server-id=1
 wsrep-on=1
 
 log-bin
-log-slave-updates
 
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb
@@ -44,7 +44,6 @@ server-id=2
 wsrep-on=1
 
 log-bin
-log-slave-updates
 
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb

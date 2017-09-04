@@ -24,6 +24,9 @@
 #include <cstdlib>
 #include "debug_sync.h"
 
+extern Rpl_filter* binlog_filter;
+extern my_bool opt_log_slave_updates;
+
 extern ulonglong thd_to_trx_id(THD *thd);
 
 extern "C" int thd_binlog_format(const MYSQL_THD thd);
@@ -72,6 +75,11 @@ void wsrep_register_hton(THD* thd, bool all)
   if (WSREP(thd) && thd->wsrep_exec_mode != TOTAL_ORDER &&
       !thd->wsrep_apply_toi)
   {
+    if (thd->slave_thread && !opt_log_slave_updates)
+    {
+      WSREP_DEBUG("skipping binlogging for slave, with no slave updates");
+      return;
+    }
     if (thd->wsrep_exec_mode == LOCAL_STATE      &&
         (thd_sql_command(thd) == SQLCOM_OPTIMIZE ||
         thd_sql_command(thd) == SQLCOM_ANALYZE   ||
@@ -310,8 +318,6 @@ int wsrep_commit(handlerton *hton, THD *thd, bool all)
 }
 
 
-extern Rpl_filter* binlog_filter;
-extern my_bool opt_log_slave_updates;
 
 enum wsrep_trx_status
 wsrep_run_wsrep_commit(THD *thd, bool all)
