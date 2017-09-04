@@ -1006,6 +1006,19 @@ int start_slave_threads(THD *thd,
     lock_cond_sql = &mi->rli.run_lock;
   }
 
+#ifdef WITH_WSREP
+  if (WSREP_ON && !opt_log_slave_updates)
+  {
+    /*
+       bad configurations, mariadb replication would not be forwarded to wsrep cluster
+       which would need to immediate inconsistency
+     */
+    WSREP_WARN("Cannot start MariaDB slave, when log_slave_updates is not set");
+    my_error(ER_SLAVE_CONFIGURATION, MYF(0), "bad configuration no log_slave_updates defined, slave would not replicate further to wsrep cluster");
+    DBUG_RETURN(true);
+  }
+#endif /* WITH_WSREP */
+
   /*
     If we are using GTID and both SQL and IO threads are stopped, then get
     rid of all relay logs.
