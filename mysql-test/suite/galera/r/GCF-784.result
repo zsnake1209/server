@@ -1,0 +1,5 @@
+connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection node_2;
+START SLAVE ;
+ERROR HY000: bad configuration no log_slave_updates defined, slave would not replicate further to wsrep cluster
+RESET SLAVE ALL;

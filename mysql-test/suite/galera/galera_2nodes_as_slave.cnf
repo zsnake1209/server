@@ -23,6 +23,7 @@ wsrep-on=1
 log-bin
 
 innodb-autoinc-lock-mode=2
+innodb_flush_log_at_trx_commit=2
 default-storage-engine=innodb
 wsrep-provider=@ENV.WSREP_PROVIDER
 wsrep_node_address=127.0.0.1
@@ -46,6 +47,7 @@ wsrep-on=1
 log-bin
 
 innodb-autoinc-lock-mode=2
+innodb_flush_log_at_trx_commit=2
 default-storage-engine=innodb
 wsrep-provider=@ENV.WSREP_PROVIDER
 wsrep_node_address=127.0.0.1
