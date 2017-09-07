@@ -742,14 +742,14 @@ public:
 
   bool add()
   {
-    Item *arg = get_arg(0);
+    Item *arg= get_arg(0);
     if (arg->is_null())
       return false;
 
     if (first_call)
     {
       prev_value= arg->val_real();
-      if (prev_value >1 || prev_value < 0)
+      if (prev_value > 1 || prev_value < 0)
       {
         my_error(ER_ARGUMENT_OUT_OF_RANGE, MYF(0));
         return true;
@@ -759,7 +759,7 @@ public:
 
     double arg_val= arg->val_real();
 
-    if (prev_value !=  arg_val)
+    if (prev_value != arg_val)
     {
       my_error(ER_ARGUMENT_NOT_CONSTANT, MYF(0));
       return true;
@@ -806,7 +806,7 @@ public:
 
   void fix_length_and_dec()
   {
-    decimals = 10;  // TODO-cvicentiu find out how many decimals the standard
+    decimals = 5;  // TODO-cvicentiu find out how many decimals the standard
                     // requires.
   }
 
@@ -814,6 +814,7 @@ public:
   { return get_item_copy<Item_sum_percentile_disc>(thd, mem_root, this); }
   void setup_window_func(THD *thd, Window_spec *window_spec);
   void setup_hybrid(THD *thd, Item *item);
+  bool fix_fields(THD *thd, Item **ref);
 
 private:
   Item_cache *value;
@@ -861,7 +862,7 @@ public:
 
   bool add()
   {
-    Item *arg = get_arg(0);
+    Item *arg= get_arg(0);
     if (arg->is_null())
       return false;
 
@@ -869,7 +870,7 @@ public:
     {
       first_call= false;
       prev_value= arg->val_real();
-      if (prev_value >1 || prev_value < 0)
+      if (prev_value > 1 || prev_value < 0)
       {
         my_error(ER_ARGUMENT_OUT_OF_RANGE, MYF(0));
         return true;
@@ -877,7 +878,7 @@ public:
     }
 
     double arg_val= arg->val_real();
-    if (prev_value !=  arg_val)
+    if (prev_value != arg_val)
     {
       my_error(ER_ARGUMENT_NOT_CONSTANT, MYF(0));
       return true;
@@ -935,7 +936,7 @@ public:
 
   void fix_length_and_dec()
   {
-    decimals = 10;  // TODO-cvicentiu find out how many decimals the standard
+    decimals = 5;  // TODO-cvicentiu find out how many decimals the standard
                     // requires.
   }
 
@@ -943,6 +944,7 @@ public:
   { return get_item_copy<Item_sum_percentile_cont>(thd, mem_root, this); }
   void setup_window_func(THD *thd, Window_spec *window_spec);
   void setup_hybrid(THD *thd, Item *item);
+  bool fix_fields(THD *thd, Item **ref);
 
 private:
   Item_cache *floor_value;

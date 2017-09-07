@@ -5236,7 +5236,6 @@ public:
   Cached_item_real(Item *item_par) :Cached_item_item(item_par),value(0.0) {}
   bool cmp(void);
   int  cmp_read_only();
-  double get_value(){ return value;}
 };
 
 class Cached_item_int :public Cached_item_item
@@ -5246,7 +5245,6 @@ public:
   Cached_item_int(Item *item_par) :Cached_item_item(item_par),value(0) {}
   bool cmp(void);
   int  cmp_read_only();
-  longlong get_value(){ return value;}
 };
 
 
@@ -5257,7 +5255,6 @@ public:
   Cached_item_decimal(Item *item_par);
   bool cmp(void);
   int  cmp_read_only();
-  my_decimal *get_value(){ return &value;};
 };
 
 class Cached_item_field :public Cached_item
