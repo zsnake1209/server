@@ -7779,3 +7779,5 @@ ER_COMPRESSED_COLUMN_USED_AS_KEY
   eng "Compressed column '%-.192s' can't be used in key specification"
 ER_UNKNOWN_COMPRESSION_METHOD
   eng "Unknown compression method: %s"
+ER_INVISIBLE_NOT_NULL_WITHOUT_DEFAULT
+        eng "Hidden column '%s' must either have a default value or allow null values"
