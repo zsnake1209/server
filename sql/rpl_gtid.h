@@ -34,6 +34,13 @@ struct rpl_gtid
   uint64 seq_no;
 };
 
+inline bool operator==(const rpl_gtid& lhs, const rpl_gtid& rhs)
+{
+  return
+    lhs.domain_id == rhs.domain_id &&
+    lhs.server_id == rhs.server_id &&
+    lhs.seq_no    == rhs.seq_no;
+};
 
 enum enum_gtid_skip_type {
   GTID_SKIP_NOT, GTID_SKIP_STANDALONE, GTID_SKIP_TRANSACTION

@@ -6622,6 +6622,183 @@ void MYSQL_BIN_LOG::checkpoint_and_purge(ulong binlog_id)
   purge();
 }
 
+
+/**
+  Searches for the first (oldest) binlog file name in in the binlog index.
+
+  @param[in,out]  buf_arg  pointer to a buffer to hold found
+                           the first binary log file name
+  @return         NULL     on success, otherwise error message
+*/
+static const char* get_first_binlog(char* buf_arg)
+{
+  IO_CACHE *index_file;
+  size_t length;
+  char fname[FN_REFLEN];
+  const char* errmsg= NULL;
+
+  DBUG_ENTER("get_first_binlog");
+
+  DBUG_ASSERT(mysql_bin_log.is_open());
+
+  mysql_bin_log.lock_index();
+
+  index_file=mysql_bin_log.get_index_file();
+  if (reinit_io_cache(index_file, READ_CACHE, (my_off_t) 0, 0, 0))
+  {
+    errmsg= "failed to create a cache on binlog index";
+    goto end;
+  }
+  /* The file ends with EOF or empty line */
+  if ((length=my_b_gets(index_file, fname, sizeof(fname))) <= 1)
+  {
+    errmsg= "empty binlog index";
+    goto end;
+  }
+  else
+  {
+    fname[length-1]= 0;                         // Remove end \n
+  }
+  if (normalize_binlog_name(buf_arg, fname, false))
+  {
+    errmsg= "cound not normalize the first file name in the binlog index";
+    goto end;
+  }
+end:
+  mysql_bin_log.unlock_index();
+
+  DBUG_RETURN(errmsg);
+}
+
+/**
+  Check weather the gtid binlog state can safely remove gtid
+  domains passed as the argument. The safety condition is satisfied when
+  there are no events from the being deleted domains in the currently existing
+  binlog files. Upon successful check the supplied domains are removed
+  from @@gtid_binlog_state. The caller is supposed to rotate binlog so that
+  the active latest file won't have the deleted domains in its Gtid_list header.
+
+  @param  domain_drop_lex  gtid domain id sequence from lex, may contain dups.
+                           Passed as a pointer to dynamic array must be not empty
+                           unless pointer value NULL.
+  @retval zero             on success
+  @retval > 0              no gtid domains is deleted
+  @retval < 0              on error
+*/
+static int do_delete_gtid_domain(DYNAMIC_ARRAY *domain_drop_lex)
+{
+  int rc= 0;
+
+  if (!domain_drop_lex)
+    return 0;
+
+  DBUG_ASSERT(domain_drop_lex->elements > 0);
+  mysql_mutex_assert_owner(mysql_bin_log.get_log_lock());
+
+  Gtid_list_log_event *glev= NULL;
+  char buf[FN_REFLEN];
+  char errbuf[MYSQL_ERRMSG_SIZE];
+  File file;
+  IO_CACHE cache;
+  const char *errmsg = NULL;
+  DYNAMIC_ARRAY domain_unique; // sequece (unsorted) of unique element*:s
+  rpl_binlog_state::element* domain_unique_buffer[16];
+  ulong k;
+
+  my_init_dynamic_array2(&domain_unique,
+                         sizeof(rpl_binlog_state::element*),
+                         domain_unique_buffer,
+                         sizeof(domain_unique_buffer) /
+                         sizeof(rpl_binlog_state::element*), 4, 0);
+
+  if ((errmsg= get_first_binlog(buf)) != NULL)
+    goto end;
+  bzero((char*) &cache, sizeof(cache));
+  if ((file= open_binlog(&cache, buf, &errmsg)) == (File) -1)
+    goto end;
+  errmsg= get_gtid_list_event(&cache, &glev);
+  end_io_cache(&cache);
+  mysql_file_close(file, MYF(MY_WME));
+
+  DBUG_EXECUTE_IF("inject_binlog_delete_domain_init_error",
+                  errmsg= "injected error";);
+  if (errmsg)
+    goto end;
+  /*
+    Check whether the current binlog state has the same gtids
+    from being deleted domains as the oldest binlog file. When it's not true
+    that indicates presense of a binlog file with the deleted domain gtids.
+  */
+  for (ulong i= 0; i < domain_drop_lex->elements; i++)
+  {
+    rpl_binlog_state::element *elem= NULL;
+    ulong *ptr_domain_id;
+    bool not_match;
+
+    ptr_domain_id= (ulong*) dynamic_array_ptr(domain_drop_lex, i);
+    elem= (rpl_binlog_state::element *)
+      my_hash_search(&rpl_global_gtid_binlog_state.hash,
+                     (const uchar *) ptr_domain_id, 0);
+    if (!elem)
+    {
+      push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
+                          ER_BINLOG_CANT_DELETE_GTID_DOMAIN,
+                          "being deleted gtid domain '%lu' is not in "
+                          "the current binlog state", *ptr_domain_id);
+      continue;
+    }
+
+    for (not_match= true, k= 0; k < elem->hash.records; k++)
+    {
+      rpl_gtid *d_gtid= (rpl_gtid *)my_hash_element(&elem->hash, k);
+      for (ulong l= 0; l < glev->count && not_match; l++)
+        not_match= !(*d_gtid == glev->list[l]);
+    }
+
+    if (not_match)
+    {
+      sprintf(errbuf, "binlog files may contain gtids from being deleted domain "
+              "'%lu'; make sure first to purge those files", *ptr_domain_id);
+      errmsg= errbuf;
+      goto end;
+    }
+    // compose a sequence of unique pointers to domain object
+    for (k= 0; k < domain_unique.elements; k++)
+    {
+      if ((rpl_binlog_state::element*) dynamic_array_ptr(&domain_unique, k)
+          == elem)
+        break; // domain_id's elem has been already in
+    }
+    if (k == domain_unique.elements) // proven not to have duplicates
+      insert_dynamic(&domain_unique, (uchar*) &elem);
+  }
+
+  // Domain removal from binlog state
+  for (k= 0; k < domain_unique.elements; k++)
+  {
+    rpl_binlog_state::element *elem= *(rpl_binlog_state::element**)
+      dynamic_array_ptr(&domain_unique, k);
+    my_hash_free(&elem->hash);
+    my_hash_delete(&rpl_global_gtid_binlog_state.hash, (uchar*) elem);
+  }
+
+end:
+  if (errmsg)
+  {
+    my_error(ER_BINLOG_CANT_DELETE_GTID_DOMAIN, MYF(0), errmsg);
+    rc= -1;
+  }
+  else
+  {
+    if (domain_unique.elements == 0)
+      rc= 1;
+  }
+  delete glev;
+  delete_dynamic(&domain_unique);
+
+  return rc;
+}
+
 /**
   The method is a shortcut of @c rotate() and @c purge().
   LOCK_log is acquired prior to rotate and is released after it.
@@ -6631,9 +6808,10 @@ void MYSQL_BIN_LOG::checkpoint_and_purge(ulong binlog_id)
   @retval
     nonzero - error in rotating routine.
 */
-int MYSQL_BIN_LOG::rotate_and_purge(bool force_rotate)
+int MYSQL_BIN_LOG::rotate_and_purge(bool force_rotate,
+                                    DYNAMIC_ARRAY *domain_drop_lex)
 {
-  int error= 0;
+  int err_gtid=0, error= 0;
   ulong prev_binlog_id;
   DBUG_ENTER("MYSQL_BIN_LOG::rotate_and_purge");
   bool check_purge= false;
@@ -6641,7 +6819,14 @@ int MYSQL_BIN_LOG::rotate_and_purge(bool force_rotate)
   //todo: fix the macro def and restore safe_mutex_assert_not_owner(&LOCK_log);
   mysql_mutex_lock(&LOCK_log);
   prev_binlog_id= current_binlog_id;
-  if ((error= rotate(force_rotate, &check_purge)))
+
+  if ((domain_drop_lex && (err_gtid= do_delete_gtid_domain(domain_drop_lex))))
+  {
+    // inffective attempt to delete does not error only skips rotate and purge
+    if (err_gtid < 0)
+      error= 1;
+  }
+  else if ((error= rotate(force_rotate, &check_purge)))
     check_purge= false;
   /*
     NOTE: Run purge_logs wo/ holding LOCK_log because it does not need
@@ -10217,6 +10402,73 @@ TC_LOG_BINLOG::set_status_variables(THD *thd)
     set_binlog_snapshot_file(cache_mngr->last_commit_pos_file);
     binlog_snapshot_position= cache_mngr->last_commit_pos_offset;
   }
+}
+
+
+/*
+  Find the Gtid_list_log_event at the start of a binlog.
+
+  NULL for ok, non-NULL error message for error.
+
+  If ok, then the event is returned in *out_gtid_list. This can be NULL if we
+  get back to binlogs written by old server version without GTID support. If
+  so, it means we have reached the point to start from, as no GTID events can
+  exist in earlier binlogs.
+*/
+const char *
+get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list)
+{
+  Format_description_log_event init_fdle(BINLOG_VERSION);
+  Format_description_log_event *fdle;
+  Log_event *ev;
+  const char *errormsg = NULL;
+
+  *out_gtid_list= NULL;
+
+  if (!(ev= Log_event::read_log_event(cache, 0, &init_fdle,
+                                      opt_master_verify_checksum)) ||
+      ev->get_type_code() != FORMAT_DESCRIPTION_EVENT)
+  {
+    if (ev)
+      delete ev;
+    return "Could not read format description log event while looking for "
+      "GTID position in binlog";
+  }
+
+  fdle= static_cast<Format_description_log_event *>(ev);
+
+  for (;;)
+  {
+    Log_event_type typ;
+
+    ev= Log_event::read_log_event(cache, 0, fdle, opt_master_verify_checksum);
+    if (!ev)
+    {
+      errormsg= "Could not read GTID list event while looking for GTID "
+        "position in binlog";
+      break;
+    }
+    typ= ev->get_type_code();
+    if (typ == GTID_LIST_EVENT)
+      break;                                    /* Done, found it */
+    if (typ == START_ENCRYPTION_EVENT)
+    {
+      if (fdle->start_decryption((Start_encryption_log_event*) ev))
+        errormsg= "Could not set up decryption for binlog.";
+    }
+    delete ev;
+    if (typ == ROTATE_EVENT || typ == STOP_EVENT ||
+        typ == FORMAT_DESCRIPTION_EVENT || typ == START_ENCRYPTION_EVENT)
+      continue;                                 /* Continue looking */
+
+    /* We did not find any Gtid_list_log_event, must be old binlog. */
+    ev= NULL;
+    break;
+  }
+
+  delete fdle;
+  *out_gtid_list= static_cast<Gtid_list_log_event *>(ev);
+  return errormsg;
 }
 
 struct st_mysql_storage_engine binlog_storage_engine=
