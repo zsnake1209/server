@@ -225,7 +225,7 @@ static int loc_rename(const char *from, const char *to)
 
 static my_off_t loc_tell(File fd)
 {
-  os_off_t pos= IF_WIN(_telli64(fd),tell(fd));
+  os_off_t pos= IF_WIN(_telli64(fd),lseek(fd, 0, SEEK_CUR));
   if (pos == (os_off_t) -1)
   {
     my_errno= errno;
